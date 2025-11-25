@@ -1,0 +1,25 @@
+# Core AI and LLM
+openai>=1.0.0
+
+# Web Search and Scraping
+duckduckgo-search>=4.0.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# Configuration
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+
+# Data Processing
+matplotlib>=3.7.0
+numpy>=1.24.0
+
+# GUI
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# Async Support
+aiohttp>=3.9.0

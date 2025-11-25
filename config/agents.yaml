@@ -1,0 +1,32 @@
+research_agent_001:
+  max_search_results: 6
+  max_pages_to_scrape: 4
+  quality_threshold: 0.7
+  preferred_domains:
+    - arxiv.org
+    - github.com
+    - medium.com
+    - towardsdatascience.com
+  max_concurrent_tasks: 3
+
+code_agent_001:
+  max_code_length: 10000
+  quality_threshold: 0.8
+  test_coverage_threshold: 0.7
+  optimization_level: "balanced"
+  security_scan: true
+  include_documentation: true
+  max_concurrent_tasks: 3
+  safe_mode: true
+
+filesystem_agent_001:
+  root_dir: "./workspace"
+  allowed_extensions:
+    - .txt
+    - .py
+    - .md
+    - .json
+    - .csv
+    - .log
+    - .yaml
+  max_concurrent_tasks: 5

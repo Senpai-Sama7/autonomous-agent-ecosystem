@@ -1,0 +1,11 @@
+system:
+  environment: "production"
+  log_level: "INFO"
+  max_concurrent_workflows: 10
+  enable_monitoring: true
+
+llm:
+  provider: "openai"
+  model_name: "gpt-3.5-turbo"
+  timeout: 60
+  max_retries: 3
