@@ -107,3 +107,54 @@ class DatabaseManager:
                   (agent_id, metric_type, value, datetime.now()))
         conn.commit()
         conn.close()
+    
+    def backup(self, backup_path: str):
+        """Create a backup of the database"""
+        import shutil
+        try:
+            shutil.copy2(self.db_path, backup_path)
+            logger.info(f"Database backed up to {backup_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Backup failed: {e}")
+            return False
+    
+    def restore(self, backup_path: str):
+        """Restore database from backup"""
+        import shutil
+        try:
+            shutil.copy2(backup_path, self.db_path)
+            logger.info(f"Database restored from {backup_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Restore failed: {e}")
+            return False
+
+# CLI interface
+if __name__ == "__main__":
+    import sys
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Database Management CLI')
+    parser.add_argument('command', choices=['backup', 'restore'], help='Command to execute')
+    parser.add_argument('--db', default='ecosystem.db', help='Database file path')
+    parser.add_argument('--file', required=True, help='Backup file path')
+    
+    args = parser.parse_args()
+    
+    db = DatabaseManager(args.db)
+    
+    if args.command == 'backup':
+        if db.backup(args.file):
+            print(f"✅ Backup created: {args.file}")
+            sys.exit(0)
+        else:
+            print(f"❌ Backup failed")
+            sys.exit(1)
+    elif args.command == 'restore':
+        if db.restore(args.file):
+            print(f"✅ Database restored from: {args.file}")
+            sys.exit(0)
+        else:
+            print(f"❌ Restore failed")
+            sys.exit(1)

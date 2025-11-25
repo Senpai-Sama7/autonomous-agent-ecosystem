@@ -44,78 +44,68 @@ class AutonomousAgentEcosystem:
         """Initialize and register all agents"""
         logger.info("Initializing agents...")
         
+        # Load agent configs from YAML
+        from utils.config_loader import ConfigLoader
+        config_loader = ConfigLoader()
+        agent_configs = config_loader.load_agent_configs()
+        
         # Research Agent
+        research_config_dict = agent_configs.get('research_agent_001', {})
         research_agent = ResearchAgent(
             agent_id="research_agent_001",
-            config={
-                'max_search_results': 5,
-                'max_pages_to_scrape': 3,
-                'quality_threshold': 0.7,
-                'preferred_domains': ['arxiv.org', 'github.com', 'medium.com', 'towardsdatascience.com'],
-                'max_concurrent_tasks': 2
-            }
+            config=research_config_dict
         )
         
         # Code Agent Configuration
-        code_agent_config = {
-            'max_code_length': 10000,
-            'quality_threshold': 0.8,
-            'test_coverage_threshold': 0.7,
-            'optimization_level': 'balanced',
-            'security_scan': True,
-            'include_documentation': True,
-            'max_concurrent_tasks': 2,
-            'safe_mode': True,
-            # LLM Configuration
+        code_config_dict = agent_configs.get('code_agent_001', {})
+        # Merge with LLM settings from command line
+        code_config_dict.update({
             'llm_provider': self.config.get('llm_provider', 'openai'),
             'model_name': self.config.get('model_name'),
             'api_key': self.config.get('api_key'),
             'api_base': self.config.get('api_base')
-        }
+        })
         
-        # Code Agent
         code_agent = CodeAgent(
             agent_id="code_agent_001",
-            config=code_agent_config
+            config=code_config_dict
         )
 
         # FileSystem Agent
+        fs_config_dict = agent_configs.get('filesystem_agent_001', {})
         fs_agent = FileSystemAgent(
             agent_id="filesystem_agent_001",
-            config={
-                'root_dir': './workspace',
-                'allowed_extensions': ['.txt', '.py', '.md', '.json', '.csv', '.log']
-            }
+            config=fs_config_dict
         )
         
         # Register agents with the engine
-        research_config = AgentConfig(
+        research_engine_config = AgentConfig(
             agent_id="research_agent_001",
             capabilities=["web_search", "content_extraction", "knowledge_synthesis", "data_processing"],
-            max_concurrent_tasks=2,
+            max_concurrent_tasks=research_config_dict.get('max_concurrent_tasks', 2),
             reliability_score=0.92,
             cost_per_operation=1.5
         )
         
-        code_config = AgentConfig(
+        code_engine_config = AgentConfig(
             agent_id="code_agent_001",
             capabilities=["code_generation", "code_optimization", "debugging", "optimization"],
-            max_concurrent_tasks=2,
+            max_concurrent_tasks=code_config_dict.get('max_concurrent_tasks', 2),
             reliability_score=0.88,
             cost_per_operation=2.0
         )
 
-        fs_config = AgentConfig(
+        fs_engine_config = AgentConfig(
             agent_id="filesystem_agent_001",
             capabilities=["data_processing", "file_operations"],
-            max_concurrent_tasks=5,
+            max_concurrent_tasks=fs_config_dict.get('max_concurrent_tasks', 5),
             reliability_score=0.99,
             cost_per_operation=0.5
         )
         
-        await self.engine.register_agent(research_config, instance=research_agent)
-        await self.engine.register_agent(code_config, instance=code_agent)
-        await self.engine.register_agent(fs_config, instance=fs_agent)
+        await self.engine.register_agent(research_engine_config, instance=research_agent)
+        await self.engine.register_agent(code_engine_config, instance=code_agent)
+        await self.engine.register_agent(fs_engine_config, instance=fs_agent)
         
         # Store agent references
         self.agents["research_agent_001"] = research_agent
@@ -310,11 +300,7 @@ class AutonomousAgentEcosystem:
         logger.info("✨ AUTONOMOUS AGENT ECOSYSTEM EXECUTION COMPLETE")
         logger.info("=" * 60)
 
-from core.nl_interface import NaturalLanguageInterface
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
+from core.llm_factory import LLMFactory
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -331,7 +317,7 @@ def parse_arguments():
     # LLM Configuration
     parser.add_argument('--llm-provider', type=str, default='openai', choices=['openai', 'openrouter', 'ollama'],
                       help='LLM provider to use (openai, openrouter, ollama)')
-    parser.add_argument('--model-name', type=str,
+    parser.add_argument('--model-name', type=str, default='gpt-3.5-turbo',
                       help='Model name to use (e.g., gpt-4, anthropic/claude-3-opus, llama3)')
     parser.add_argument('--api-key', type=str,
                       help='API key for the LLM provider')
@@ -361,23 +347,18 @@ async def main():
         monitoring_task = asyncio.create_task(ecosystem.dashboard.start_monitoring())
         
         if args.interactive:
-            # Initialize NL Interface
-            llm_client = None
-            if OpenAI:
-                # Setup client based on args (simplified for demo)
-                api_key = args.api_key or os.getenv("OPENAI_API_KEY")
-                base_url = args.api_base
-                if args.llm_provider == "ollama":
-                    api_key = "ollama"
-                    base_url = base_url or "http://localhost:11434/v1"
-                elif args.llm_provider == "openrouter":
-                    api_key = args.api_key or os.getenv("OPENROUTER_API_KEY")
-                    base_url = "https://openrouter.ai/api/v1"
-                
-                if api_key:
-                    llm_client = OpenAI(api_key=api_key, base_url=base_url)
+            # Initialize NL Interface using Factory
+            llm_client = LLMFactory.create_client(
+                provider=args.llm_provider,
+                api_key=args.api_key,
+                base_url=args.api_base
+            )
 
-            nl_interface = NaturalLanguageInterface(ecosystem.engine, llm_client)
+            nl_interface = NaturalLanguageInterface(
+                engine=ecosystem.engine, 
+                llm_client=llm_client,
+                model_name=args.model_name
+            )
             
             logger.info("\n💬 Interactive Mode Enabled. Type your request (or 'exit' to quit):")
             while True:

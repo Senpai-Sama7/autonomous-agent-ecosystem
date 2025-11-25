@@ -15,9 +15,10 @@ class NaturalLanguageInterface:
     Uses an LLM to parse intent and extract parameters.
     """
     
-    def __init__(self, engine: AgentEngine, llm_client: Any = None):
+    def __init__(self, engine: AgentEngine, llm_client: Any = None, model_name: str = "gpt-3.5-turbo"):
         self.engine = engine
         self.llm_client = llm_client
+        self.model_name = model_name
         
     async def process_request(self, user_input: str) -> str:
         """
@@ -67,7 +68,7 @@ class NaturalLanguageInterface:
         """
         
         response = self.llm_client.chat.completions.create(
-            model="gpt-3.5-turbo", # Or configured model
+            model=self.model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}

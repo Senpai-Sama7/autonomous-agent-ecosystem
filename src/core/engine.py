@@ -199,11 +199,25 @@ class AgentEngine:
             return True
             
         # Check if all dependencies are in completed_tasks
-        for dep_task_id in task.dependencies:
-            if dep_task_id not in self.completed_tasks:
+        for dep_id in task.dependencies:
+            if dep_id not in self.completed_tasks:
+                # Check if dependency failed
+                if dep_id in self.failed_tasks:
+                    logger.warning(f"Task {task.task_id} has failed dependency {dep_id}")
+                    return False
+                # Dependency not yet completed
                 return False
-                
-        return True 
+        return True
+    
+    def _is_transient_error(self, error_message: str) -> bool:
+        """Determine if an error is transient and worth retrying"""
+        transient_keywords = [
+            'timeout', 'connection', 'network', 'temporary',
+            'rate limit', 'too many requests', 'unavailable',
+            'service temporarily', 'try again'
+        ]
+        error_lower = error_message.lower()
+        return any(keyword in error_lower for keyword in transient_keywords)
                 
     async def _find_suitable_agent(self, task: Task) -> Optional[str]:
         """Find the most suitable agent for a given task"""
@@ -283,9 +297,27 @@ class AgentEngine:
                 await self._apply_incentives(agent_id, execution_time, task.priority)
             else:
                 logger.error(f"Task {task.task_id} failed for agent {agent_id}: {result.error_message}")
-                self.failed_tasks.add(task.task_id)
-                self.db.save_task(task.task_id, "unknown", task.description, "failed", assigned_agent=agent_id, result={'error': result.error_message})
-                await self._handle_task_failure(task, agent_id)
+                
+                # Check if task should be retried
+                retry_count = getattr(task, 'retry_count', 0)
+                max_retries = 3
+                
+                if retry_count < max_retries and self._is_transient_error(result.error_message):
+                    # Exponential backoff: 2^retry_count seconds
+                    backoff_time = 2 ** retry_count
+                    logger.info(f"Retrying task {task.task_id} after {backoff_time}s (attempt {retry_count + 1}/{max_retries})")
+                    
+                    # Update retry count
+                    task.retry_count = retry_count + 1
+                    
+                    # Re-queue task after backoff
+                    await asyncio.sleep(backoff_time)
+                    await self.task_queue.put(task)
+                else:
+                    # Max retries exceeded or permanent failure
+                    self.failed_tasks.add(task.task_id)
+                    self.db.save_task(task.task_id, "unknown", task.description, "failed", assigned_agent=agent_id, result={'error': result.error_message})
+                    await self._handle_task_failure(task, agent_id)
                 
         except Exception as e:
             logger.error(f"Error executing task {task.task_id} with agent {agent_id}: {str(e)}")

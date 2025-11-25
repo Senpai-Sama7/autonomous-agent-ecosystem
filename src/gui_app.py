@@ -70,9 +70,10 @@ class AgentCard(ctk.CTkFrame):
 
 class WorkflowItem(ctk.CTkFrame):
     """Visual item for workflow in history"""
-    def __init__(self, master, workflow_name, status, time_str, **kwargs):
+    def __init__(self, master, workflow_name, status, time_str, workflow_id=None, **kwargs):
         super().__init__(master, **kwargs)
         self.configure(fg_color="#1e1e1e", corner_radius=10, height=60)
+        self.workflow_id = workflow_id
         
         # Time
         time_label = ctk.CTkLabel(self, text=time_str, text_color="#666", font=ctk.CTkFont(size=10))
@@ -83,14 +84,18 @@ class WorkflowItem(ctk.CTkFrame):
         name_label.pack(side="left", padx=5, fill="x", expand=True)
         
         # Status badge
-        status_colors = {
+        self.status_colors = {
             "running": "#ff9500",
             "completed": "#4cd964",
             "failed": "#ff3b30"
         }
-        badge = ctk.CTkLabel(self, text=status.upper(), text_color=status_colors.get(status, "gray"),
+        self.badge = ctk.CTkLabel(self, text=status.upper(), text_color=self.status_colors.get(status, "gray"),
                            font=ctk.CTkFont(size=10, weight="bold"))
-        badge.pack(side="right", padx=10)
+        self.badge.pack(side="right", padx=10)
+
+    def update_status(self, status):
+        """Update status badge"""
+        self.badge.configure(text=status.upper(), text_color=self.status_colors.get(status, "gray"))
 
 class EnhancedGUI(ctk.CTk):
     def __init__(self):
@@ -155,16 +160,79 @@ class EnhancedGUI(ctk.CTk):
         
         self.start_btn = self.create_action_button("🚀 Start System", self.start_system, 3, "#4cd964")
         self.stop_btn = self.create_action_button("⏸️ Stop System", self.stop_system, 4, "#ff3b30")
-        self.clear_btn = self.create_action_button("🗑️ Clear Logs", self.clear_logs, 5, "#666")
+        self.settings_btn = self.create_action_button("⚙️ Settings", self.open_settings, 5, "#4a90e2")
+        self.clear_btn = self.create_action_button("🗑️ Clear Logs", self.clear_logs, 6, "#666")
         
         # Agent Cards Section
         agents_label = ctk.CTkLabel(self.sidebar, text="AGENTS", 
                                     font=ctk.CTkFont(size=12, weight="bold"), text_color="#666")
-        agents_label.grid(row=6, column=0, padx=20, pady=(20, 10), sticky="w")
+        agents_label.grid(row=7, column=0, padx=20, pady=(20, 10), sticky="w")
         
         # Scrollable agent cards
         self.agents_frame = ctk.CTkScrollableFrame(self.sidebar, fg_color="transparent")
-        self.agents_frame.grid(row=7, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.agents_frame.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="nsew")
+
+    def open_settings(self):
+        """Open settings dialog"""
+        if not hasattr(self, 'settings_window') or not self.settings_window.winfo_exists():
+            self.settings_window = SettingsDialog(self)
+        else:
+            self.settings_window.focus()
+
+class SettingsDialog(ctk.CTkToplevel):
+    """Dialog for configuring LLM settings"""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.title("System Settings")
+        self.geometry("400x500")
+        self.resizable(False, False)
+        
+        # Title
+        ctk.CTkLabel(self, text="LLM Configuration", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
+        
+        # Provider
+        ctk.CTkLabel(self, text="Provider:").pack(anchor="w", padx=20, pady=(10, 0))
+        self.provider_var = ctk.StringVar(value=os.getenv("LLM_PROVIDER", "openai"))
+        self.provider_menu = ctk.CTkOptionMenu(self, variable=self.provider_var, 
+                                             values=["openai", "openrouter", "ollama"])
+        self.provider_menu.pack(fill="x", padx=20, pady=5)
+        
+        # Model
+        ctk.CTkLabel(self, text="Model Name:").pack(anchor="w", padx=20, pady=(10, 0))
+        self.model_entry = ctk.CTkEntry(self)
+        self.model_entry.insert(0, os.getenv("LLM_MODEL", "gpt-3.5-turbo"))
+        self.model_entry.pack(fill="x", padx=20, pady=5)
+        
+        # API Key
+        ctk.CTkLabel(self, text="API Key:").pack(anchor="w", padx=20, pady=(10, 0))
+        self.api_key_entry = ctk.CTkEntry(self, show="*")
+        self.api_key_entry.insert(0, os.getenv("OPENAI_API_KEY", ""))
+        self.api_key_entry.pack(fill="x", padx=20, pady=5)
+        
+        # Base URL
+        ctk.CTkLabel(self, text="Base URL (Optional):").pack(anchor="w", padx=20, pady=(10, 0))
+        self.base_url_entry = ctk.CTkEntry(self)
+        self.base_url_entry.insert(0, os.getenv("LLM_BASE_URL", ""))
+        self.base_url_entry.pack(fill="x", padx=20, pady=5)
+        
+        # Save Button
+        ctk.CTkButton(self, text="Save Configuration", command=self.save_settings, 
+                     fg_color="#4cd964", hover_color="#3da852").pack(pady=30)
+                     
+    def save_settings(self):
+        """Save settings and update parent"""
+        os.environ["LLM_PROVIDER"] = self.provider_var.get()
+        os.environ["LLM_MODEL"] = self.model_entry.get()
+        os.environ["OPENAI_API_KEY"] = self.api_key_entry.get()
+        os.environ["LLM_BASE_URL"] = self.base_url_entry.get()
+        
+        # Force re-initialization of LLM client
+        if hasattr(self.parent, 'llm_client'):
+            delattr(self.parent, 'llm_client')
+            
+        logging.info("⚙️ Settings updated successfully")
+        self.destroy()
         
     def create_action_button(self, text, command, row, color="#4a90e2"):
         btn = ctk.CTkButton(self.sidebar, text=text, command=command, 
@@ -405,13 +473,24 @@ class EnhancedGUI(ctk.CTk):
     async def _process_command_async(self, command):
         """Process command with NL interface"""
         from core.nl_interface import NaturalLanguageInterface
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        except:
-            client = None
+        from core.llm_factory import LLMFactory
+        
+        # Initialize client if not already done
+        if not hasattr(self, 'llm_client'):
+            # Try to get config from environment or defaults
+            # In a real app, we'd have a settings dialog to configure this
+            self.llm_client = LLMFactory.create_client(
+                provider=os.getenv("LLM_PROVIDER", "openai"),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("LLM_BASE_URL")
+            )
             
-        nl = NaturalLanguageInterface(self.ecosystem.engine, client)
+        nl = NaturalLanguageInterface(
+            engine=self.ecosystem.engine, 
+            llm_client=self.llm_client,
+            model_name=os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+        )
+        
         try:
             workflow_id = await nl.process_request(command)
             logging.info(f"✅ Workflow created: {workflow_id}")

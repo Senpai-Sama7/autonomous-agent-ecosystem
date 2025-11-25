@@ -4,7 +4,10 @@ FileSystem Agent for Safe File Operations
 import os
 import logging
 import shutil
+import asyncio
 from typing import Dict, Any, List, Optional
+import aiofiles
+import aiofiles.os
 from .base_agent import BaseAgent, AgentCapability, AgentContext, TaskResult, AgentState
 
 logger = logging.getLogger("FileSystemAgent")
@@ -18,6 +21,7 @@ class FileSystemAgent(BaseAgent):
         super().__init__(agent_id, [AgentCapability.DATA_PROCESSING], config)
         self.root_dir = os.path.abspath(config.get("root_dir", "./workspace"))
         self.allowed_extensions = config.get("allowed_extensions", [".txt", ".py", ".md", ".json", ".csv", ".log"])
+        self.max_file_size = config.get("max_file_size", 10 * 1024 * 1024)  # 10MB default
         
         # Ensure root dir exists
         if not os.path.exists(self.root_dir):
@@ -35,13 +39,13 @@ class FileSystemAgent(BaseAgent):
             operation = task.get('payload', {}).get('operation')
             
             if operation == 'write_file':
-                return self._write_file(task.get('payload', {}))
+                return await self._write_file(task.get('payload', {}))
             elif operation == 'read_file':
-                return self._read_file(task.get('payload', {}))
+                return await self._read_file(task.get('payload', {}))
             elif operation == 'list_dir':
-                return self._list_dir(task.get('payload', {}))
+                return await self._list_dir(task.get('payload', {}))
             elif operation == 'make_dir':
-                return self._make_dir(task.get('payload', {}))
+                return await self._make_dir(task.get('payload', {}))
             else:
                 return TaskResult(success=False, error_message=f"Unknown operation: {operation}")
 
@@ -51,12 +55,17 @@ class FileSystemAgent(BaseAgent):
         finally:
             self.state = AgentState.ACTIVE
 
-    def _write_file(self, payload: Dict[str, Any]) -> TaskResult:
+    async def _write_file(self, payload: Dict[str, Any]) -> TaskResult:
         path = payload.get('path')
         content = payload.get('content')
         
         if not path or content is None:
             return TaskResult(success=False, error_message="Missing path or content")
+        
+        # Check file size
+        content_size = len(content.encode('utf-8'))
+        if content_size > self.max_file_size:
+            return TaskResult(success=False, error_message=f"File size ({content_size} bytes) exceeds limit ({self.max_file_size} bytes)")
             
         if not self._is_safe_path(path):
             return TaskResult(success=False, error_message=f"Access denied: Path {path} is outside workspace")
@@ -69,16 +78,16 @@ class FileSystemAgent(BaseAgent):
              return TaskResult(success=False, error_message=f"Access denied: Extension {ext} not allowed")
 
         try:
-            # Ensure parent dir exists
+            # Ensure parent dir exists (blocking but fast, usually cached)
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
+                await f.write(content)
             return TaskResult(success=True, result_data={'path': path, 'size': len(content)})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))
 
-    def _read_file(self, payload: Dict[str, Any]) -> TaskResult:
+    async def _read_file(self, payload: Dict[str, Any]) -> TaskResult:
         path = payload.get('path')
         
         if not path:
@@ -93,13 +102,13 @@ class FileSystemAgent(BaseAgent):
             return TaskResult(success=False, error_message="File not found")
             
         try:
-            with open(full_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+                content = await f.read()
             return TaskResult(success=True, result_data={'content': content})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))
 
-    def _list_dir(self, payload: Dict[str, Any]) -> TaskResult:
+    async def _list_dir(self, payload: Dict[str, Any]) -> TaskResult:
         path = payload.get('path', '.')
         
         if not self._is_safe_path(path):
@@ -108,12 +117,13 @@ class FileSystemAgent(BaseAgent):
         full_path = os.path.join(self.root_dir, path)
         
         try:
-            items = os.listdir(full_path)
+            # Run blocking os.listdir in thread pool
+            items = await asyncio.get_event_loop().run_in_executor(None, os.listdir, full_path)
             return TaskResult(success=True, result_data={'items': items})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))
             
-    def _make_dir(self, payload: Dict[str, Any]) -> TaskResult:
+    async def _make_dir(self, payload: Dict[str, Any]) -> TaskResult:
         path = payload.get('path')
         
         if not path:
@@ -125,7 +135,7 @@ class FileSystemAgent(BaseAgent):
         full_path = os.path.join(self.root_dir, path)
         
         try:
-            os.makedirs(full_path, exist_ok=True)
+            await asyncio.get_event_loop().run_in_executor(None, os.makedirs, full_path, 0o777, True)
             return TaskResult(success=True, result_data={'path': path})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))

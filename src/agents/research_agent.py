@@ -4,7 +4,8 @@ Research Agent with Real Web Search Capabilities
 import asyncio
 import logging
 import json
-from typing import Dict, Any, List
+import time
+from typing import Dict, Any, List, Optional
 from duckduckgo_search import DDGS
 import requests
 from bs4 import BeautifulSoup
@@ -17,6 +18,14 @@ class ResearchAgent(BaseAgent):
         super().__init__(agent_id, [AgentCapability.DATA_PROCESSING], config)
         self.ddgs = DDGS()
         self.max_results = config.get('max_search_results', 5)
+        
+        # Rate limiting
+        self.min_request_interval = config.get('min_request_interval', 1.0)  # seconds between requests
+        self.last_request_time = 0
+        
+        # Simple in-memory cache
+        self.cache = {}
+        self.cache_ttl = config.get('cache_ttl', 3600)  # 1 hour default
 
     async def execute_task(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
         try:
@@ -59,35 +68,69 @@ class ResearchAgent(BaseAgent):
             self.state = AgentState.ACTIVE
 
     def _search_web(self, query: str) -> List[Dict]:
-        """Execute real DuckDuckGo search"""
+        """Execute real DuckDuckGo search with caching"""
+        # Check cache first
+        cache_key = f"search:{query}"
+        if cache_key in self.cache:
+            cached_data, timestamp = self.cache[cache_key]
+            if time.time() - timestamp < self.cache_ttl:
+                logger.info(f"Using cached search results for: {query}")
+                return cached_data
+        
+        # Rate limiting
+        self._apply_rate_limit()
+        
         try:
             results = list(self.ddgs.text(query, max_results=self.max_results))
+            # Cache results
+            self.cache[cache_key] = (results, time.time())
             return results
         except Exception as e:
             logger.error(f"Search API error: {e}")
             return []
 
     def _scrape_content(self, url: str) -> str:
-        """Scrape text content from URL"""
+        """Scrape text content from URL with caching"""
+        # Check cache
+        cache_key = f"scrape:{url}"
+        if cache_key in self.cache:
+            cached_data, timestamp = self.cache[cache_key]
+            if time.time() - timestamp < self.cache_ttl:
+                logger.info(f"Using cached content for: {url}")
+                return cached_data
+        
+        # Rate limiting
+        self._apply_rate_limit()
+        
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
+            response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Remove script and style elements
+            # Extract text
             for script in soup(["script", "style"]):
                 script.decompose()
-                
             text = soup.get_text()
-            # Break into lines and remove leading/trailing space on each
+            
+            # Clean up
             lines = (line.strip() for line in text.splitlines())
-            # Drop blank lines
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = '\n'.join(chunk for chunk in chunks if chunk)
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            # Cache result
+            self.cache[cache_key] = (text, time.time())
             return text
         except Exception as e:
             logger.warning(f"Failed to scrape {url}: {e}")
             return ""
+    
+    def _apply_rate_limit(self):
+        """Apply rate limiting between requests"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            sleep_time = self.min_request_interval - time_since_last
+            time.sleep(sleep_time)
+        self.last_request_time = time.time()
 
     def _synthesize_results(self, results: List[Dict]) -> str:
         if not results:
