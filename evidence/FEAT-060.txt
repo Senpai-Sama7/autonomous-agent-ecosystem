@@ -1,0 +1,2 @@
+ecosystem.db: SQLite 3.x database, last written using SQLite version 3046001, writer version 2, read version 2, file counter 10, database pages 14, cookie 0x9, schema 4, UTF-8, version-valid-for 10
+agents     metrics    tasks      workflows

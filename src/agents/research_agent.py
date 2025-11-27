@@ -10,7 +10,13 @@ import asyncio
 import logging
 import time
 from typing import Dict, Any, List, Optional
-from duckduckgo_search import DDGS
+# Use new ddgs package with fallback to duckduckgo_search
+try:
+    from ddgs import DDGS
+    DDGS_NEW_API = True
+except ImportError:
+    from duckduckgo_search import DDGS
+    DDGS_NEW_API = False
 import aiohttp
 from bs4 import BeautifulSoup
 from .base_agent import BaseAgent, AgentCapability, AgentContext, TaskResult, AgentState
@@ -102,8 +108,12 @@ class ResearchAgent(BaseAgent):
         # Note: Rate limiting for this sync method is handled at call site
         # since we can't use asyncio.sleep here (we're in a thread)
         try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=self.max_results))
+            # New ddgs API doesn't use context manager
+            if DDGS_NEW_API:
+                results = DDGS().text(query, max_results=self.max_results)
+            else:
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(query, max_results=self.max_results))
             # Cache results
             self._add_to_cache(cache_key, results)
             return results

@@ -216,7 +216,7 @@ When you launch `gui_app.py`, you'll see a beautiful dark-themed interface:
 | **System Status** (top-left) | 🟢 Green = Running, ⚫ Gray = Offline |
 | **Agent Cards** (left sidebar) | Shows each AI agent and what it's doing |
 | **Command Input** (top) | Where you type your requests |
-| **System Activity** (bottom-left) | Live log of what's happening |
+| **Reasoning & Logs** (bottom-left) | AI chain-of-thought and detailed system logs |
 | **Workflow History** (bottom-right) | List of your past commands |
 
 ### Settings & Configuration
@@ -226,6 +226,13 @@ Click **"⚙️ Settings"** to configure:
 - **Provider**: Choose your AI (OpenAI, Ollama, or OpenRouter)
 - **Model**: Select which AI model to use
 - **API Key**: Enter your API key (hidden for security)
+
+### Reasoning, Logs & Errors
+
+- **Reasoning** tab shows the AI's Chain of Thought for each request.
+- **Logs** tab shows detailed system and debug logs.
+- When something goes wrong, an **error popup** appears with suggested fixes
+  (for example: open Settings to set an API key, start Ollama, or switch models).
 
 ---
 
@@ -590,6 +597,46 @@ python tests/test_advanced_systems.py
 # Expected output:
 # ✅ ALL TESTS PASSED - SYSTEM IS PRODUCTION READY
 ```
+
+You can also run the full health check:
+
+```bash
+python health_check.py
+```
+
+---
+
+## ✅ Production Checklist
+
+Before using ASTRO in a production-like environment, walk through this checklist:
+
+1. **Install dependencies**
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+   pip install -r requirements.txt
+   ```
+
+2. **Configure your AI provider**
+
+   - Create a `.env` file with your API key(s) **or** use the in-app **Settings** dialog.
+   - Supported options: **OpenAI**, **OpenRouter**, or local **Ollama**.
+
+3. **Run automated checks**
+
+   ```bash
+   python -m pytest tests/test_advanced_systems.py
+   python health_check.py
+   ```
+
+4. **Launch ASTRO (GUI)**
+
+   ```bash
+   python src/gui_app.py
+   ```
+
+---
 
 ---
 

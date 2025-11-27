@@ -1,0 +1,11 @@
+.......                                                                  [100%]
+7 passed in 0.62s
+ASTRO Health Check
+
+== Running advanced systems tests ==
+  ✓ Advanced systems tests passed
+
+== Checking GUI imports ==
+  ✓ GUI modules imported (10 tutorial steps, 17 colors)
+
+✅ HEALTH CHECK PASSED - Ready for production use
