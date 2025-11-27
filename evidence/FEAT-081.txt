@@ -1,4 +1,0 @@
-2025-11-27 06:58:40,712 - MonitoringDashboard - INFO - Monitoring Dashboard initialized with real telemetry support
-2025-11-27 06:58:40,712 - MainApplication - INFO - Autonomous Agent Ecosystem initialized
-Attempting to create window...
-Window created

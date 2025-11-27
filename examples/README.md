@@ -7,7 +7,7 @@ This directory contains runnable examples demonstrating ASTRO features.
 ### Prerequisites
 
 ```bash
-cd /home/donovan/Downloads/Astro-main
+cd /Downloads/Astro-main
 source venv/bin/activate
 
 # Verify system is ready

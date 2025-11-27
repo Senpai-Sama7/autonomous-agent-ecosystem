@@ -1,3 +1,0 @@
-ResearchAgent E2E: success=True
-  Sources found: 3
-  Summary length: 889 chars
