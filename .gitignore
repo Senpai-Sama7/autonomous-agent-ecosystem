@@ -59,3 +59,17 @@ htmlcov/
 *.app
 *.deb
 debian/usr/share/astro/
+
+# Cleanup trash (reversible deletes)
+.trash/
+
+# Analysis artifacts
+.analysis/
+
+# IDE/Editor artifacts
+.qodo/
+*.ckpt
+.ipynb_checkpoints/
+
+# Scripts output
+scripts/__pycache__/
