@@ -4,9 +4,16 @@
 
 # Core AI and LLM
 openai==1.55.3
+transformers==4.46.3
+torch
+
+chromadb==0.5.20
+sentence-transformers==3.3.1
+
 
 # Web Search and Scraping
-ddgs==6.2.0
+duckduckgo-search
+
 beautifulsoup4==4.12.3
 requests==2.32.3
 
@@ -19,7 +26,7 @@ python-dotenv==1.0.1
 pyyaml==6.0.2
 
 # Data Processing
-matplotlib==3.9.2
+
 numpy==1.26.4
 
 # GUI

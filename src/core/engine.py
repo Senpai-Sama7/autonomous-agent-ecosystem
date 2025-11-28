@@ -9,12 +9,23 @@ Features:
 - Performance monitoring with emergent behavior detection
 - Cost optimization algorithms balancing speed vs. reliability
 """
+Autonomous Agent Ecosystem Core Engine
+November 25, 2025
+
+This engine orchestrates self-coordinating agent networks for complex workflow automation.
+Features:
+- Incentive alignment mechanisms
+- Failure recovery with graceful degradation
+- Performance monitoring with emergent behavior detection
+- Cost optimization algorithms balancing speed vs. reliability
+"""
 
 import asyncio
 import json
 import logging
 import time
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from .database import DatabaseManager
@@ -99,6 +110,10 @@ class AgentEngine:
         self._shutdown_requested = False
         self._last_status_log = 0.0
         
+        # GIL Optimization: Process Pool for CPU-bound tasks
+        self.process_pool: Optional[ProcessPoolExecutor] = None
+
+        
     async def register_agent(self, config: AgentConfig, instance: Any = None):
         """Register a new agent with the ecosystem"""
         self.agents[config.agent_id] = config
@@ -181,6 +196,10 @@ class AgentEngine:
         """Request graceful shutdown of the engine"""
         logger.info("Shutdown requested for agent engine")
         self._shutdown_requested = True
+        
+        if self.process_pool:
+            logger.info("Shutting down process pool...")
+            self.process_pool.shutdown(wait=False)
         
     async def _engine_loop(self):
         """Main engine loop that processes tasks and manages agents"""
@@ -566,3 +585,14 @@ class AgentEngine:
                 for agent_id, metrics in self.performance_metrics.items()
             }
         }
+
+    async def execute_cpu_bound(self, func: Callable, *args) -> Any:
+        """
+        Execute a CPU-bound function in a separate process to bypass GIL.
+        Useful for AST parsing, heavy computation, or complex text synthesis.
+        """
+        if not self.process_pool:
+            self.process_pool = ProcessPoolExecutor()
+            
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self.process_pool, func, *args)

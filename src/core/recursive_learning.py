@@ -30,7 +30,15 @@ from collections import deque
 import hashlib
 import statistics
 import pickle
+import pickle
 from pathlib import Path
+
+try:
+    import chromadb
+    from sentence_transformers import SentenceTransformer
+    HAS_RAG = True
+except ImportError:
+    HAS_RAG = False
 
 logger = logging.getLogger(__name__)
 
@@ -381,7 +389,25 @@ class RecursiveLearner:
         
         # Load existing knowledge
         self._load_knowledge()
-    
+        
+        # Initialize RAG system (ChromaDB + Embeddings)
+        self.chroma_client = None
+        self.collection = None
+        self.embedding_model = None
+        
+        if HAS_RAG:
+            try:
+                logger.info("Initializing Semantic Memory (ChromaDB + SentenceTransformers)...")
+                self.chroma_client = chromadb.PersistentClient(path=str(self.storage_path / "chroma"))
+                self.collection = self.chroma_client.get_or_create_collection(name="experiences")
+                # Use a lightweight model for speed
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                logger.info("Semantic Memory initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Semantic Memory: {e}")
+                HAS_RAG = False
+        else:
+            logger.warning("ChromaDB or SentenceTransformers not found. Semantic Memory disabled.")    
     def record_experience(self, 
                           experience_type: ExperienceType,
                           context: Dict[str, Any],
@@ -415,6 +441,27 @@ class RecursiveLearner:
         
         # Trigger incremental learning
         self._incremental_learn(experience)
+        
+        # Store in Vector DB for Semantic Retrieval
+        if HAS_RAG and self.collection and self.embedding_model:
+            try:
+                # Create embedding for context (stringify context)
+                context_str = json.dumps(context, sort_keys=True)
+                embedding = self.embedding_model.encode(context_str).tolist()
+                
+                self.collection.add(
+                    documents=[context_str],
+                    embeddings=[embedding],
+                    metadatas=[{
+                        "action": action, 
+                        "reward": reward, 
+                        "signal": signal.value,
+                        "type": experience_type.value
+                    }],
+                    ids=[experience.experience_id]
+                )
+            except Exception as e:
+                logger.error(f"Failed to store experience in Vector DB: {e}")
         
         logger.debug(f"Recorded experience: {experience.experience_id}")
         return experience.experience_id
@@ -549,6 +596,41 @@ class RecursiveLearner:
         
         if best_action:
             return best_action, best_score
+            
+        # Fallback: Semantic Search (RAG) if no exact pattern match
+        if HAS_RAG and self.collection and self.embedding_model:
+            try:
+                context_str = json.dumps(context, sort_keys=True)
+                embedding = self.embedding_model.encode(context_str).tolist()
+                
+                results = self.collection.query(
+                    query_embeddings=[embedding],
+                    n_results=5
+                )
+                
+                if results['ids'] and results['ids'][0]:
+                    # Analyze retrieved experiences
+                    actions = {}
+                    for i, meta in enumerate(results['metadatas'][0]):
+                        action = meta['action']
+                        reward = float(meta['reward'])
+                        dist = results['distances'][0][i] if 'distances' in results else 0.5
+                        
+                        # Score = reward weighted by similarity (1 - dist)
+                        score = reward * (1 - min(dist, 1.0))
+                        
+                        if action not in actions:
+                            actions[action] = 0.0
+                        actions[action] += score
+                    
+                    # Pick best action from semantic retrieval
+                    if actions:
+                        rag_best_action = max(actions.items(), key=lambda x: x[1])
+                        if rag_best_action[1] > 0.2: # Threshold
+                            return rag_best_action[0], min(rag_best_action[1], 0.9)
+            except Exception as e:
+                logger.error(f"Semantic retrieval failed: {e}")
+                
         return None
     
     def _calculate_match_score(self, context: Dict[str, Any], pattern: Pattern) -> float:

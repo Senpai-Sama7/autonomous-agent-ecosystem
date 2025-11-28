@@ -14,21 +14,6 @@ REFACTORED: Real telemetry integration.
 
 import asyncio
 import json
-import logging
-import time
-import os
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
-from enum import Enum
-import matplotlib.pyplot as plt
-import numpy as np
-from io import BytesIO
-import base64
-
-# Import psutil for real system metrics
-try:
-    import psutil
-    HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
     logging.warning("psutil not installed. System metrics will be estimated.")

@@ -19,6 +19,12 @@ except ImportError:
     AsyncOpenAI = None
     HAS_ASYNC_OPENAI = False
 
+try:
+    from transformers import pipeline
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+
 logger = logging.getLogger("NaturalLanguageInterface")
 
 
@@ -66,6 +72,20 @@ class NaturalLanguageInterface:
         self.llm_client = llm_client
         self.model_name = model_name
         
+        # Initialize ML-based injection defense
+        self.injection_classifier = None
+        if HAS_TRANSFORMERS:
+            try:
+                logger.info("Loading prompt injection classifier (protectai/deberta-v3-base-prompt-injection)...")
+                self.injection_classifier = pipeline(
+                    "text-classification", 
+                    model="protectai/deberta-v3-base-prompt-injection"
+                )
+                logger.info("Prompt injection classifier loaded successfully")
+            except Exception as e:
+                logger.warning(f"Failed to load injection classifier: {e}")
+        else:
+            logger.warning("Transformers library not found. ML-based prompt injection defense disabled.")        
     def _sanitize_input(self, input_str: str) -> str:
         """
         Sanitize user input to prevent prompt injection attacks.
@@ -97,6 +117,23 @@ class NaturalLanguageInterface:
                     "Your request was blocked for security reasons. "
                     "Please rephrase your request without attempting to modify system behavior."
                 )
+        
+        # Layer 2: ML-based detection (Slower but smarter)
+        if self.injection_classifier:
+            try:
+                # Truncate for model if needed (DeBERTa has 512 limit usually)
+                model_input = normalized[:512] 
+                result = self.injection_classifier(model_input)[0]
+                
+                # Check for injection (label is usually 'INJECTION' or 'SAFE')
+                if result['label'] == 'INJECTION' and result['score'] > 0.9:
+                    logger.warning(f"SECURITY: ML model detected prompt injection (score: {result['score']:.2f})")
+                    raise SecurityException("Adversarial input detected by AI defense system")
+            except SecurityException:
+                raise
+            except Exception as e:
+                logger.error(f"Error during ML injection check: {e}")
+                # Fail open for availability, but log error
         
         # Length limit to prevent token exhaustion attacks
         max_length = 10000
