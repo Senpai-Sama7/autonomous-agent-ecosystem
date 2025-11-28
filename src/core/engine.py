@@ -9,16 +9,6 @@ Features:
 - Performance monitoring with emergent behavior detection
 - Cost optimization algorithms balancing speed vs. reliability
 """
-Autonomous Agent Ecosystem Core Engine
-November 25, 2025
-
-This engine orchestrates self-coordinating agent networks for complex workflow automation.
-Features:
-- Incentive alignment mechanisms
-- Failure recovery with graceful degradation
-- Performance monitoring with emergent behavior detection
-- Cost optimization algorithms balancing speed vs. reliability
-"""
 
 import asyncio
 import json
@@ -30,8 +20,6 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from .database import DatabaseManager
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("AgentEngine")
 
 class AgentStatus(Enum):

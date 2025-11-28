@@ -9,22 +9,22 @@ with real agents, workflows, and monitoring capabilities.
 
 import asyncio
 import json
-import logging
 import time
 from typing import Dict, Any, List
 import argparse
 import os
 
+from utils.logger import configure_logging, get_logger
 from core.engine import AgentEngine, AgentConfig, Workflow, Task, WorkflowPriority
+from core.nl_interface import NaturalLanguageInterface
 from agents.research_agent import ResearchAgent
 from agents.code_agent import CodeAgent
 from agents.filesystem_agent import FileSystemAgent
 from monitoring.monitoring_dashboard import MonitoringDashboard
 from core.llm_factory import LLMFactory
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("MainApplication")
+# Logger will be configured in main() based on CLI args
+logger = get_logger("MainApplication")
 
 class AutonomousAgentEcosystem:
     """
@@ -338,8 +338,11 @@ async def main():
     """Main entry point"""
     args = parse_arguments()
     
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
+    # Configure logging based on CLI args (must be done early)
+    configure_logging(
+        log_level="DEBUG" if args.debug else "INFO",
+        log_to_file=True
+    )
     
     # Convert args to config dict
     config = vars(args)
