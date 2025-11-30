@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="astro-logo.png" alt="ASTRO" width="300"/>
+</p>
+
 <div align="center">
 
 # 🌟 ASTRO - Autonomous Agent Ecosystem
