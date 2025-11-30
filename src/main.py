@@ -1,10 +1,6 @@
 """
 Autonomous Agent Ecosystem - Main Application
-November 25, 2025
-
-This is the main entry point for the autonomous agent ecosystem system.
-It demonstrates the complete end-to-end functionality of the system
-with real agents, workflows, and monitoring capabilities.
+Updated by C0Di3 to support Declarative Workflows and Templating.
 """
 
 import asyncio
@@ -22,6 +18,7 @@ from agents.code_agent import CodeAgent
 from agents.filesystem_agent import FileSystemAgent
 from monitoring.monitoring_dashboard import MonitoringDashboard
 from core.llm_factory import LLMFactory
+from utils.config_loader import ConfigLoader
 
 # Logger will be configured in main() based on CLI args
 logger = get_logger("MainApplication")
@@ -37,6 +34,12 @@ class AutonomousAgentEcosystem:
         self.dashboard = MonitoringDashboard()
         self.agents = {}
         self.workflows = {}
+        
+        # 1. Initialize ConfigLoader and load file-based configs
+        self.config_loader = ConfigLoader()
+        self.loaded_configs = self.config_loader.load_configs()
+        
+        # 2. Merge CLI config (overrides files)
         self.config = config or {}
         
         logger.info("Autonomous Agent Ecosystem initialized")
@@ -45,33 +48,39 @@ class AutonomousAgentEcosystem:
         """Initialize and register all agents"""
         logger.info("Initializing agents...")
         
-        # Load agent configs from YAML
-        from utils.config_loader import ConfigLoader
-        config_loader = ConfigLoader()
-        agent_configs = config_loader.load_agent_configs()
+        # Get agent configs from loader
+        agent_configs = self.loaded_configs.get('agents', {})
+        
+        # Determine LLM settings: CLI > Config File > Default
+        llm_config = self.loaded_configs.get('llm', {})
+        
+        provider = self.config.get('llm_provider') or getattr(llm_config, 'provider', 'openai')
+        api_key = self.config.get('api_key') or getattr(llm_config, 'api_key', None)
+        base_url = self.config.get('api_base') or getattr(llm_config, 'api_base', None)
+        model_name = self.config.get('model_name') or getattr(llm_config, 'model_name', 'gpt-3.5-turbo')
         
         # Create shared LLM client
         llm_client = LLMFactory.create_client(
-            provider=self.config.get('llm_provider', 'openai'),
-            api_key=self.config.get('api_key'),
-            base_url=self.config.get('api_base')
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url
         )
         
-        # Research Agent
+        # --- Research Agent ---
         research_config_dict = agent_configs.get('research_agent_001', {})
         research_agent = ResearchAgent(
             agent_id="research_agent_001",
             config=research_config_dict
         )
         
-        # Code Agent Configuration
+        # --- Code Agent ---
         code_config_dict = agent_configs.get('code_agent_001', {})
-        # Merge with LLM settings from command line
+        # Update with runtime LLM settings
         code_config_dict.update({
-            'llm_provider': self.config.get('llm_provider', 'openai'),
-            'model_name': self.config.get('model_name'),
-            'api_key': self.config.get('api_key'),
-            'api_base': self.config.get('api_base')
+            'llm_provider': provider,
+            'model_name': model_name,
+            'api_key': api_key,
+            'api_base': base_url
         })
         
         code_agent = CodeAgent(
@@ -80,7 +89,7 @@ class AutonomousAgentEcosystem:
             llm_client=llm_client
         )
 
-        # FileSystem Agent
+        # --- FileSystem Agent ---
         fs_config_dict = agent_configs.get('filesystem_agent_001', {})
         fs_agent = FileSystemAgent(
             agent_id="filesystem_agent_001",
@@ -88,119 +97,98 @@ class AutonomousAgentEcosystem:
         )
         
         # Register agents with the engine
-        research_engine_config = AgentConfig(
-            agent_id="research_agent_001",
-            capabilities=["web_search", "content_extraction", "knowledge_synthesis", "data_processing"],
-            max_concurrent_tasks=research_config_dict.get('max_concurrent_tasks', 2),
-            reliability_score=0.92,
-            cost_per_operation=1.5
+        # (Note: In a real "Super Intelligent" system, we might load these AgentConfig objects from YAML too)
+        await self.engine.register_agent(
+            AgentConfig(
+                agent_id="research_agent_001",
+                capabilities=["web_search", "content_extraction", "knowledge_synthesis", "data_processing"],
+                max_concurrent_tasks=research_config_dict.get('max_concurrent_tasks', 2),
+                reliability_score=0.92,
+                cost_per_operation=1.5
+            ), 
+            instance=research_agent
         )
         
-        code_engine_config = AgentConfig(
-            agent_id="code_agent_001",
-            capabilities=["code_generation", "code_optimization", "debugging", "optimization"],
-            max_concurrent_tasks=code_config_dict.get('max_concurrent_tasks', 2),
-            reliability_score=0.88,
-            cost_per_operation=2.0
+        await self.engine.register_agent(
+            AgentConfig(
+                agent_id="code_agent_001",
+                capabilities=["code_generation", "code_optimization", "debugging", "optimization"],
+                max_concurrent_tasks=code_config_dict.get('max_concurrent_tasks', 2),
+                reliability_score=0.88,
+                cost_per_operation=2.0
+            ),
+            instance=code_agent
         )
 
-        fs_engine_config = AgentConfig(
-            agent_id="filesystem_agent_001",
-            capabilities=["data_processing", "file_operations"],
-            max_concurrent_tasks=fs_config_dict.get('max_concurrent_tasks', 5),
-            reliability_score=0.99,
-            cost_per_operation=0.5
+        await self.engine.register_agent(
+            AgentConfig(
+                agent_id="filesystem_agent_001",
+                capabilities=["data_processing", "file_operations"],
+                max_concurrent_tasks=fs_config_dict.get('max_concurrent_tasks', 5),
+                reliability_score=0.99,
+                cost_per_operation=0.5
+            ),
+            instance=fs_agent
         )
-        
-        await self.engine.register_agent(research_engine_config, instance=research_agent)
-        await self.engine.register_agent(code_engine_config, instance=code_agent)
-        await self.engine.register_agent(fs_engine_config, instance=fs_agent)
         
         # Store agent references
         self.agents["research_agent_001"] = research_agent
         self.agents["code_agent_001"] = code_agent
         self.agents["filesystem_agent_001"] = fs_agent
         
-        # Register agents with monitoring dashboard
-        self.dashboard.register_agent("research_agent_001", {
-            'state': 'active',
-            'performance_score': 0.92,
-            'capabilities': ['web_search', 'content_extraction']
-        })
-        
-        self.dashboard.register_agent("code_agent_001", {
-            'state': 'active',
-            'performance_score': 0.88,
-            'capabilities': ['code_generation', 'optimization']
-        })
-
-        self.dashboard.register_agent("filesystem_agent_001", {
-            'state': 'active',
-            'performance_score': 0.99,
-            'capabilities': ['file_operations']
-        })
+        # Register with dashboard
+        self.dashboard.register_agent("research_agent_001", {'state': 'active', 'capabilities': ['web_search']})
+        self.dashboard.register_agent("code_agent_001", {'state': 'active', 'capabilities': ['code_generation']})
+        self.dashboard.register_agent("filesystem_agent_001", {'state': 'active', 'capabilities': ['file_operations']})
         
         logger.info("Agents initialized and registered successfully")
         
     async def create_sample_workflows(self):
-        """Create sample workflows to demonstrate system capabilities"""
-        logger.info("Creating sample workflows...")
+        """Create sample workflows from Declarative YAML Templates"""
+        logger.info("Creating sample workflows from templates...")
         
-        # Workflow 1: Research and Code Generation for ML Task
-        ml_workflow = Workflow(
-            workflow_id="workflow_ml_001",
-            name="ML Model Research and Implementation",
-            tasks=[
-                Task(
-                    task_id="task_research_001",
-                    description="Research latest ML model architectures for time series forecasting",
-                    required_capabilities=["data_processing"], # Matches ResearchAgent capability
-                    priority=WorkflowPriority.HIGH,
-                    deadline=time.time() + 300,  # 5 minutes
-                    payload={
-                        'query': 'state of the art time series forecasting models 2025',
-                    }
-                ),
-                Task(
-                    task_id="task_code_001",
-                    description="Generate Python code for LSTM time series forecasting model",
-                    required_capabilities=["optimization"], # Matches CodeAgent capability
-                    priority=WorkflowPriority.HIGH,
-                    deadline=time.time() + 600,  # 10 minutes
-                    dependencies=["task_research_001"],
-                    payload={
-                        'code_task_type': 'generate_code',
-                        'requirements': 'Create a simple python script that prints "Hello from Autonomous Agent Ecosystem!"'
-                    }
-                ),
-                Task(
-                    task_id="task_exec_001",
-                    description="Execute the generated code",
-                    required_capabilities=["optimization"],
-                    priority=WorkflowPriority.HIGH,
-                    dependencies=["task_code_001"],
-                    payload={
-                        'code_task_type': 'execute_code',
-                        'code': 'print("Hello from the executed code!")' # In real flow, this would come from previous task result
-                    }
-                )
-            ],
-            priority=WorkflowPriority.HIGH,
-            max_execution_time=900,  # 15 minutes
-            cost_budget=500.0,
-            success_criteria={
-                'min_quality_score': 0.8,
-                'max_execution_time': 600,
-                'required_capabilities': ['time_series_forecasting', 'model_evaluation']
-            }
+        # 1. Research Workflow (Data-Driven)
+        research_workflow = self.config_loader.create_workflow_from_template(
+            "research_topic",
+            variables={"query": "State of the Art LLM Agents 2025"}
         )
         
-        # Submit workflows to engine
-        await self.engine.submit_workflow(ml_workflow)
+        if research_workflow:
+            await self.engine.submit_workflow(research_workflow)
+            self.workflows[research_workflow.workflow_id] = research_workflow
+            logger.info(f"Submitted template workflow: {research_workflow.name}")
+        else:
+            logger.warning("Could not create 'research_topic' workflow. Check workflows.yaml.")
+
+        # 2. Code Generation Workflow (Data-Driven)
+        code_workflow = self.config_loader.create_workflow_from_template(
+            "code_generator",
+            variables={"requirement": "A Python script to calculate Fibonacci sequence recursively with memoization"}
+        )
         
-        self.workflows["workflow_ml_001"] = ml_workflow
-        
-        logger.info("Sample workflows created and submitted successfully")
+        if code_workflow:
+            await self.engine.submit_workflow(code_workflow)
+            self.workflows[code_workflow.workflow_id] = code_workflow
+            logger.info(f"Submitted template workflow: {code_workflow.name}")
+
+        # Fallback: Create a manual one if templates fail or aren't defined
+        if not research_workflow and not code_workflow:
+            logger.info("No templates found. Falling back to hardcoded sample.")
+            manual_workflow = Workflow(
+                workflow_id="manual_fallback_001",
+                name="Manual Fallback Workflow",
+                tasks=[
+                    Task(
+                        task_id="task_manual_01",
+                        description="Say hello",
+                        required_capabilities=["code_generation"],
+                        priority=WorkflowPriority.LOW,
+                        payload={'code_task_type': 'generate_code', 'requirements': 'Print hello world'}
+                    )
+                ]
+            )
+            await self.engine.submit_workflow(manual_workflow)
+            self.workflows["manual_fallback_001"] = manual_workflow
         
     async def start_system(self):
         """Start the entire autonomous agent ecosystem"""
@@ -218,12 +206,11 @@ class AutonomousAgentEcosystem:
             engine_task = asyncio.create_task(self.engine.start_engine())
             monitoring_task = asyncio.create_task(self.dashboard.start_monitoring())
             
-            # Run for a specific duration or until interrupted
-            logger.info("System is now running. Press Ctrl+C to stop...")
-            logger.info("=" * 60)
-            
             # Run for specified duration
             duration = self.config.get('duration', 120)
+            logger.info(f"System running for {duration} seconds... Press Ctrl+C to stop.")
+            logger.info("=" * 60)
+            
             await asyncio.sleep(duration)
             
             # Cancel tasks gracefully
@@ -255,21 +242,6 @@ class AutonomousAgentEcosystem:
         system_health = self.dashboard.get_system_health()
         logger.info(f"📈 System Health Score: {system_health['health_score']:.2f} ({system_health['status']})")
         logger.info(f"🤖 Active Agents: {system_health['active_agents_count']}")
-        logger.info(f"⚠️  Recent Alerts: {len(system_health['recent_alerts'])}")
-        
-        # Agent performance summary
-        logger.info("\n" + "-" * 40)
-        logger.info("_AGENT PERFORMANCE SUMMARY_")
-        logger.info("-" * 40)
-        
-        for agent_id in self.agents.keys():
-            performance = self.dashboard.get_agent_performance(agent_id)
-            logger.info(f"\n{agent_id}:")
-            logger.info(f"  Current Performance: {performance.get('current_performance', 0):.2f}")
-            logger.info(f"  Average CPU Usage: {performance.get('avg_cpu_usage', 0):.2f}")
-            logger.info(f"  Average Memory: {performance.get('avg_memory_usage', 0):.2f}")
-            logger.info(f"  Status: {performance.get('status', 'unknown')}")
-            logger.info(f"  Recent Alerts: {performance.get('recent_alerts', 0)}")
         
         # Workflow execution summary
         logger.info("\n" + "-" * 40)
@@ -277,36 +249,13 @@ class AutonomousAgentEcosystem:
         logger.info("-" * 40)
         
         for workflow_id, workflow in self.workflows.items():
-            logger.info(f"\n{workflow.name} ({workflow_id}):")
-            logger.info(f"  Priority: {workflow.priority.value}")
-            logger.info(f"  Tasks: {len(workflow.tasks)}")
-            logger.info(f"  Budget: ${workflow.cost_budget:.2f}")
-            logger.info(f"  Max Time: {workflow.max_execution_time:.0f}s")
-        
-        # Alert summary
-        alert_summary = self.dashboard.get_alert_summary()
-        logger.info("\n" + "-" * 40)
-        logger.info("_ALERT SUMMARY_")
-        logger.info("-" * 40)
-        logger.info(f"Total Alerts: {alert_summary['total_alerts']}")
-        logger.info(f"Health Impact: {alert_summary['health_impact']:.2f}")
-        logger.info("Severity Distribution:")
-        for severity, count in alert_summary['severity_counts'].items():
-            if count > 0:
-                logger.info(f"  {severity.upper()}: {count}")
-        
-        # System metrics
-        logger.info("\n" + "-" * 40)
-        logger.info("_SYSTEM METRICS_")
-        logger.info("-" * 40)
-        metrics = self.engine.get_system_metrics()
-        logger.info(f"Total Agents: {metrics['agent_count']}")
-        logger.info(f"Active Workflows: {metrics['active_workflows']}")
-        logger.info(f"Pending Tasks: {metrics['pending_tasks']}")
-        logger.info(f"Active Tasks: {metrics['active_tasks']}")
+            completed_tasks = sum(1 for t in workflow.tasks if t.task_id in self.engine.completed_tasks)
+            total_tasks = len(workflow.tasks)
+            status = "✅ Completed" if completed_tasks == total_tasks else f"⚠️ {completed_tasks}/{total_tasks} Tasks"
+            logger.info(f"\n{workflow.name}: {status}")
         
         logger.info("\n" + "=" * 60)
-        logger.info("✨ AUTONOMOUS AGENT ECOSYSTEM EXECUTION COMPLETE")
+        logger.info("✨ EXECUTION COMPLETE")
         logger.info("=" * 60)
 
 
@@ -317,20 +266,18 @@ def parse_arguments():
                       help='Duration to run the system in seconds (default: 120)')
     parser.add_argument('--debug', action='store_true',
                       help='Enable debug logging')
-    parser.add_argument('--test-mode', action='store_true',
-                      help='Run in test mode with simulated data')
     parser.add_argument('--interactive', action='store_true',
-                      help='Run in interactive mode to accept natural language commands')
+                      help='Run in interactive mode')
     
     # LLM Configuration
-    parser.add_argument('--llm-provider', type=str, default='openai', choices=['openai', 'openrouter', 'ollama'],
+    parser.add_argument('--llm-provider', type=str,
                       help='LLM provider to use (openai, openrouter, ollama)')
-    parser.add_argument('--model-name', type=str, default='gpt-3.5-turbo',
-                      help='Model name to use (e.g., gpt-4, anthropic/claude-3-opus, llama3)')
+    parser.add_argument('--model-name', type=str,
+                      help='Model name to use')
     parser.add_argument('--api-key', type=str,
                       help='API key for the LLM provider')
     parser.add_argument('--api-base', type=str,
-                      help='Base URL for the LLM API (useful for Ollama or custom endpoints)')
+                      help='Base URL for the LLM API')
     
     return parser.parse_args()
 
@@ -338,7 +285,7 @@ async def main():
     """Main entry point"""
     args = parse_arguments()
     
-    # Configure logging based on CLI args (must be done early)
+    # Configure logging
     configure_logging(
         log_level="DEBUG" if args.debug else "INFO",
         log_to_file=True
@@ -346,83 +293,68 @@ async def main():
     
     # Convert args to config dict
     config = vars(args)
+    # Remove None values so they don't override defaults
+    config = {k: v for k, v in config.items() if v is not None}
     
     ecosystem = AutonomousAgentEcosystem(config=config)
     
+    if args.interactive:
+        await interactive_mode(ecosystem, args)
+    else:
+        await ecosystem.start_system()
+
+async def interactive_mode(ecosystem, args):
+    """Run interactive mode"""
     try:
-        # Initialize agents
         await ecosystem.initialize_agents()
         
-        # Start engine and monitoring
+        # Start engine in background
         engine_task = asyncio.create_task(ecosystem.engine.start_engine())
-        monitoring_task = asyncio.create_task(ecosystem.dashboard.start_monitoring())
+        monitor_task = asyncio.create_task(ecosystem.dashboard.start_monitoring())
         
-        if args.interactive:
-            # Initialize NL Interface using Factory
-            llm_client = LLMFactory.create_client(
-                provider=args.llm_provider,
-                api_key=args.api_key,
-                base_url=args.api_base
-            )
-
-            # Explicitly use the configured model
-            nl_interface = NaturalLanguageInterface(
-                engine=ecosystem.engine, 
-                llm_client=llm_client,
-                model_name=args.model_name
-            )
+        # Setup NL Interface
+        llm_config = ecosystem.loaded_configs.get('llm')
+        
+        llm_client = LLMFactory.create_client(
+            provider=args.llm_provider or getattr(llm_config, 'provider', 'openai'),
+            api_key=args.api_key or getattr(llm_config, 'api_key', None),
+            base_url=args.api_base or getattr(llm_config, 'api_base', None)
+        )
+        
+        nl_interface = NaturalLanguageInterface(
+            engine=ecosystem.engine,
+            llm_client=llm_client,
+            model_name=args.model_name or getattr(llm_config, 'model_name', 'gpt-3.5-turbo')
+        )
+        
+        print("\n💬 Interactive Mode Enabled. Type your request (or 'exit'):")
+        while True:
+            user_input = await asyncio.get_event_loop().run_in_executor(None, input, ">> ")
+            if user_input.lower() in ['exit', 'quit']:
+                break
             
-            logger.info("\n💬 Interactive Mode Enabled. Type your request (or 'exit' to quit):")
-            while True:
-                user_input = await asyncio.get_event_loop().run_in_executor(None, input, ">> ")
-                if user_input.lower() in ['exit', 'quit']:
-                    break
+            try:
+                # 1. Try to match a template first (Agentic shortcut)
+                # In a real system, we'd use the LLM to pick the template.
+                # For now, we rely on the NL interface or direct parsing.
+                workflow_id = await nl_interface.process_request(user_input)
+                print(f"✅ Workflow submitted: {workflow_id}")
+            except Exception as e:
+                print(f"❌ Error: {e}")
                 
-                try:
-                    workflow_id = await nl_interface.process_request(user_input)
-                    print(f"✅ Workflow submitted: {workflow_id}")
-                except Exception as e:
-                    print(f"❌ Error: {e}")
-                    
-        else:
-            # Create sample workflows and run for duration
-            await ecosystem.create_sample_workflows()
-            logger.info(f"System running for {args.duration} seconds...")
-            await asyncio.sleep(args.duration)
-            
-        # Cancel tasks gracefully
+        # Cleanup
         engine_task.cancel()
-        monitoring_task.cancel()
-        
+        monitor_task.cancel()
         try:
             await engine_task
-            await monitoring_task
+            await monitor_task
         except asyncio.CancelledError:
             pass
             
-        logger.info("✅ System shutdown completed gracefully")
-        
     except KeyboardInterrupt:
-        logger.info("Application terminated by user")
-    except Exception as e:
-        logger.error(f"Application error: {str(e)}", exc_info=True)
+        print("\nStopping...")
     finally:
         await ecosystem.generate_final_report()
 
 if __name__ == "__main__":
-    """Run the main application"""
-    print("""
-    🚀 AUTONOMOUS AGENT ECOSYSTEM - PRODUCTION MODE 🚀
-    
-    Features Enabled:
-    ✅ Real Web Search (DuckDuckGo)
-    ✅ Content Extraction (BeautifulSoup)
-    ✅ Real Code Generation (OpenAI, OpenRouter, Ollama)
-    ✅ Safe Code Execution (Subprocess)
-    ✅ Persistent Storage (SQLite)
-    ✅ Natural Language Interface (Interactive Mode)
-    
-    The system is now starting...
-    """)
-    
     asyncio.run(main())
