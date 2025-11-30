@@ -1,0 +1,32 @@
+# Declarative Workflow Definitions
+workflows:
+  research_topic:
+    description: "Deep research on a specific topic"
+    priority: "high"
+    tasks:
+      - id: "search"
+        agent: "research_agent_001"
+        capability: "web_search"
+        instruction: "Search for: {{ query }}"
+      - id: "summarize"
+        agent: "research_agent_001"
+        capability: "knowledge_synthesis"
+        instruction: "Summarize the findings from the search results."
+        dependencies: ["search"]
+      - id: "save"
+        agent: "filesystem_agent_001"
+        capability: "file_operations"
+        instruction: "Save summary to {{ query }}_report.md"
+        dependencies: ["summarize"]
+
+  code_feature:
+    description: "Implement a new feature"
+    priority: "medium"
+    tasks:
+      - id: "plan"
+        agent: "code_agent_001"
+        instruction: "Create an implementation plan for: {{ requirement }}"
+      - id: "code"
+        agent: "code_agent_001"
+        instruction: "Write the code based on the plan."
+        dependencies: ["plan"]
