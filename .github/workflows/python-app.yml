@@ -1,0 +1,49 @@
+name: Python CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.10"]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Lint
+        run: |
+          if command -v ruff >/dev/null 2>&1; then ruff check .; fi
+          if command -v black >/dev/null 2>&1; then black --check .; fi
+
+      - name: Run tests
+        run: |
+          if [ -f pyproject.toml ] || [ -f pytest.ini ] || ls tests/*.py >/dev/null 2>&1; then
+            pytest --maxfail=1 --disable-warnings -q
+          else
+            echo "No pytest suite detected."
+          fi
