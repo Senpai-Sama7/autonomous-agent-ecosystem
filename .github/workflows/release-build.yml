@@ -1,12 +1,13 @@
-name: Build & Release
+name: Build Release Artifacts
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'  # Triggers on tags like v1.0.0
 
 jobs:
   build:
+    name: Build for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -14,18 +15,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
       - name: Install Dependencies
-        run: pip install -r requirements.txt pyinstaller
-        
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          
       - name: Build Executable
         run: pyinstaller astro.spec --clean
         
-      - name: Upload Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ASTRO-${{ matrix.os }}
