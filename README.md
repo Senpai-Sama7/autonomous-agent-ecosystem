@@ -10,7 +10,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Senpai-Sama7/autonomous-agent-ecosystem/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Senpai-Sama7/Astrom/pulls)
 
 <img src="https://img.shields.io/badge/AI%20Powered-OpenAI%20|%20Ollama%20|%20OpenRouter-purple" alt="AI Powered">
 
@@ -101,8 +101,8 @@ You: "Research the latest trends in AI and create a summary report"
 
 **Option B: Use Git** (For developers)
 ```bash
-git clone https://github.com/Senpai-Sama7/autonomous-agent-ecosystem.git
-cd autonomous-agent-ecosystem
+git clone https://github.com/Senpai-Sama7/Astro.git
+cd Astro
 ```
 
 ### Step 2: Install Requirements
@@ -728,9 +728,9 @@ astro/
 **Something not working?** Here's how to get help:
 
 1. 📖 Check the [FAQ](#-frequently-asked-questions) above
-2. 🔍 Search [existing issues](https://github.com/Senpai-Sama7/autonomous-agent-ecosystem/issues)
-3. 🐛 [Report a bug](https://github.com/Senpai-Sama7/autonomous-agent-ecosystem/issues/new)
-4. 💬 [Start a discussion](https://github.com/Senpai-Sama7/autonomous-agent-ecosystem/discussions)
+2. 🔍 Search [existing issues](https://github.com/Senpai-Sama7/Astro/issues)
+3. 🐛 [Report a bug](https://github.com/Senpai-Sama7/Astro/issues/new)
+4. 💬 [Start a discussion](https://github.com/Senpai-Sama7/Astro/discussions)
 
 ---
 
@@ -757,6 +757,6 @@ MIT License - Use it freely, modify it, share it!
 
 ### Made with ❤️ by the ASTRO Team
 
-**[⬆ Back to Top](#-astro---autonomous-agent-ecosystem)**
+**[⬆ Back to Top](#-astro---Astrom)**
 
 </div>
