@@ -1,328 +1,215 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ASTRO · Modular Command Surface</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="grain"></div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASTRO System Documentation</title>
+    <style>
+        :root {
+            --primary-color: #0f172a;
+            --secondary-color: #334155;
+            --accent-color: #2563eb;
+            --bg-color: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            --code-bg: #f1f5f9;
+        }
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1, h2, h3 { color: var(--primary-color); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        h1 { margin-bottom: 40px; }
+        
+        /* Functional Table Styles */
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid var(--border-color); padding: 12px; text-align: left; vertical-align: top; }
+        th { background-color: var(--code-bg); font-weight: 600; }
+        
+        /* Code Blocks */
+        pre { background: var(--primary-color); color: #fff; padding: 15px; border-radius: 6px; overflow-x: auto; }
+        code { font-family: "Menlo", "Monaco", monospace; font-size: 0.9em; }
+        .inline-code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; color: var(--secondary-color); }
 
-    <header class="hero" data-tilt>
-      <div class="hero__brand">
-        <span class="mark">ASTRO</span>
-        <span class="badge">AU · 24</span>
-      </div>
-      <div class="hero__copy">
-        <p class="eyebrow">Brutalist multi-agent operations surface</p>
-        <h1>
-          Modular Swiss grid precision fused with clay-sculpted tactility for
-          modern autonomy.
-        </h1>
-        <p>
-          A comprehensive, editorially curated control desk for orchestrating AI
-          research, code, and workflow agents with confidence.
-        </p>
-      </div>
-      <div class="hero__cta">
-        <a href="/assistant" class="btn btn--primary" data-tilt>
-          Start Chatting
-        </a>
-        <button class="btn btn--ghost" data-tilt data-action="start-system" id="deploy-btn">
-          Deploy Agents
-        </button>
-      </div>
-      <dl class="hero__stats">
-        <div>
-          <dt>Agents Live</dt>
-          <dd>03</dd>
-        </div>
-        <div>
-          <dt>Latency Median</dt>
-          <dd>1.4 s</dd>
-        </div>
-        <div>
-          <dt>Confidence Index</dt>
-          <dd>97%</dd>
-        </div>
-      </dl>
+        /* Status Indicators */
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .badge-prod { background: #dcfce7; color: #166534; }
+        .badge-sec { background: #fee2e2; color: #991b1b; }
+        
+        /* Grid Layout for Agents */
+        .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+        .agent-card { border: 1px solid var(--border-color); padding: 20px; border-radius: 8px; }
+        .agent-card h3 { border-bottom: none; margin-top: 0; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>ASTRO: Autonomous Agent Ecosystem</h1>
+        <p><strong>Technical Reference Manual v1.0.0</strong></p>
+        <p>A Python-based multi-agent orchestration system utilizing asynchronous processing, local LLM inference, and containerized execution environments.</p>
     </header>
 
-    <section class="access-grid">
-      <header>
-        <p class="eyebrow">Access Points</p>
-        <h2>Choose how you want to engage the ASTRO collective</h2>
-        <p>
-          Jump straight into a conversational workspace, orchestrate workflows,
-          browse your knowledge vault, or manage generated files—just like
-          ChatGPT's multi-surface entry but tuned for agents.
-        </p>
-      </header>
-      <div class="access-grid__cards">
-        <article class="access-card" data-tilt>
-          <div class="access-card__meta">
-            <span class="tag">AI Assistant</span>
-            <span class="version">NEW</span>
-          </div>
-          <h3>Chat with ASTRO</h3>
-          <p>
-            Simple, intuitive conversations. Research, write, code, and analyze
-            with natural language—no technical knowledge required.
-          </p>
-          <a href="/assistant" class="btn btn--ghost">Start chatting</a>
-        </article>
-        <article class="access-card" data-tilt>
-          <div class="access-card__meta">
-            <span class="tag">Workflow Canvas</span>
-            <span class="version">beta</span>
-          </div>
-          <h3>Structured orchestration</h3>
-          <p>
-            Chain multi-step missions with Swiss-grid clarity and watch agents
-            execute in parallel lanes.
-          </p>
-          <button class="btn btn--ghost" data-route="/workflows">Open canvas</button>
-        </article>
-        <article class="access-card" data-tilt>
-          <div class="access-card__meta">
-            <span class="tag">Knowledge Vault</span>
-            <span class="version">sync</span>
-          </div>
-          <h3>Curated intelligence layers</h3>
-          <p>
-            Surface past research, tagged briefs, and auto-updated dossiers for
-            rapid recall.
-          </p>
-          <button class="btn btn--ghost" data-route="/vault">Review briefs</button>
-        </article>
-        <article class="access-card" data-tilt>
-          <div class="access-card__meta">
-            <span class="tag">File Atelier</span>
-            <span class="version">ops</span>
-          </div>
-          <h3>Artifact supervision</h3>
-          <p>
-            Manage generated files, compare revisions, and publish outputs to
-            the distribution rail.
-          </p>
-          <button class="btn btn--ghost" data-route="/files">Inspect artifacts</button>
-        </article>
-      </div>
-    </section>
+    <main>
+        <section id="architecture">
+            <h2>1. System Architecture</h2>
+            <p>ASTRO utilizes a Hub-and-Spoke architecture managed by a central <code>AgentEngine</code>. The system operates asynchronously using Python's <code>asyncio</code> event loop.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>File Reference</th>
+                        <th>Functionality</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Agent Engine</strong></td>
+                        <td><code>src/core/engine.py</code></td>
+                        <td>Central scheduler, task routing, priority queue management, and performance monitoring.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>NL Interface</strong></td>
+                        <td><code>src/core/nl_interface.py</code></td>
+                        <td>Intent classification and task decomposition. Sanitizes user input before LLM processing.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Database</strong></td>
+                        <td><code>src/core/database.py</code></td>
+                        <td>SQLite implementation with WAL mode. Persists agents, workflows, tasks, and metrics.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Event Bus</strong></td>
+                        <td><code>src/core/a2a_protocol.py</code></td>
+                        <td>Asynchronous message bus implementing the Actor Model for inter-agent communication.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
 
-    <main id="app-content">
-      <section class="dashboard-grid">
-        <article class="panel mission" data-tilt>
-          <div class="panel__header">
-            <p class="eyebrow">Mission Directive</p>
-            <span class="badge badge--holo">Editorial Capsule</span>
-          </div>
-          <h2>Autonomous Research Sprint · Orbit 12</h2>
-          <p>
-            Investigate emergent LLM coordination patterns across distributed
-            inference stacks. Synthesize actionable heuristics.
-          </p>
-          <ul class="pill-list">
-            <li>Research</li>
-            <li>Code</li>
-            <li>Observability</li>
-          </ul>
-          <div class="progress">
-            <span>72% completion</span>
-            <div class="progress__bar"><span style="width: 72%"></span></div>
-          </div>
-        </article>
-
-        <article class="panel console" data-tilt>
-          <div class="panel__header">
-            <p class="eyebrow">Command Console</p>
-            <span class="badge badge--dark">Live</span>
-          </div>
-          <form id="command-form">
-            <label class="console__label" for="command-input"
-              >Compose next instruction</label
-            >
-            <div class="console__input">
-              <input
-                id="command-input"
-                name="command"
-                type="text"
-                placeholder="Design a comparative insight brief on federated agents"
-                autocomplete="off"
-              />
-              <button type="submit">Execute</button>
+        <section id="agents">
+            <h2>2. Agent Capabilities</h2>
+            <div class="agent-grid">
+                <div class="agent-card">
+                    <h3>Research Agent</h3>
+                    <p><strong>Class:</strong> <code>ResearchAgent</code></p>
+                    <p><strong>Capabilities:</strong> Web Search, Content Extraction</p>
+                    <p><strong>Backend:</strong> Uses <code>duckduckgo_search</code> for discovery and <code>aiohttp</code>/<code>BeautifulSoup</code> for content scraping. Implements async rate limiting.</p>
+                </div>
+                <div class="agent-card">
+                    <h3>Code Agent</h3>
+                    <p><strong>Class:</strong> <code>CodeAgent</code></p>
+                    <p><strong>Capabilities:</strong> Code Generation, Execution</p>
+                    <p><strong>Security:</strong> Enforces Docker sandboxing for execution. Uses AST analysis for static code verification.</p>
+                </div>
+                <div class="agent-card">
+                    <h3>FileSystem Agent</h3>
+                    <p><strong>Class:</strong> <code>FileSystemAgent</code></p>
+                    <p><strong>Capabilities:</strong> I/O Operations</p>
+                    <p><strong>Constraints:</strong> Operations restricted to <code>./workspace</code> root via <code>os.path.commonpath</code> validation.</p>
+                </div>
             </div>
-          </form>
-          <div class="console__log" id="console-log">
-            <p><span>[10:14]</span> Research agent mapped 6 trusted sources.</p>
-            <p>
-              <span>[10:12]</span> Filesystem agent archived prior transcript to
-              /reports.
-            </p>
-            <p><span>[10:09]</span> Code agent refactored async orchestrator.</p>
-          </div>
-        </article>
+        </section>
 
-        <article class="panel agents" data-tilt>
-          <div class="panel__header">
-            <p class="eyebrow">Agent Stack</p>
-            <button class="micro-btn">+ Add</button>
-          </div>
-          <ul class="agent-list">
-            <li>
-              <div>
-                <span>🔬 Research · 001</span>
-                <small>Deepcrawl / Contextual synthesis</small>
-              </div>
-              <span class="status status--online">Online</span>
-            </li>
-            <li>
-              <div>
-                <span>💻 Code · 001</span>
-                <small>Python · QA harness</small>
-              </div>
-              <span class="status status--busy">Refining</span>
-            </li>
-            <li>
-              <div>
-                <span>📁 File · 001</span>
-                <small>Structured storage / Render</small>
-              </div>
-              <span class="status status--idle">Idle</span>
-            </li>
-          </ul>
-        </article>
+        <section id="security">
+            <h2>3. Security Model</h2>
+            <p>The system implements defense-in-depth strategies for code execution and input handling.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Layer</th>
+                        <th>Mechanism</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Code Sandbox</strong></td>
+                        <td>Docker Container (Isolated Network)</td>
+                        <td><span class="badge badge-prod">MANDATORY</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Input Sanitization</strong></td>
+                        <td>Regex + AST Validation</td>
+                        <td><span class="badge badge-prod">ACTIVE</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Path Traversal</strong></td>
+                        <td>Commonpath Check</td>
+                        <td><span class="badge badge-prod">ENFORCED</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dependencies</strong></td>
+                        <td>Pinned Versions (requirements.txt)</td>
+                        <td><span class="badge badge-prod">AUDITED</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="warning" style="margin-top: 20px; padding: 15px; background: #fff5f5; border: 1px solid #fee2e2; border-radius: 6px;">
+                <strong>Security Warning:</strong> Local execution fallback (`allow_local_execution`) bypasses Docker isolation and should be disabled in production environments per ADR-002.
+            </div>
+        </section>
 
-        <article class="panel telemetry" data-tilt>
-          <div class="panel__header">
-            <p class="eyebrow">Telemetry Trace</p>
-          </div>
-          <div class="telemetry__chart">
-            <div class="wave" aria-hidden="true"></div>
-            <div class="wave wave--offset" aria-hidden="true"></div>
-          </div>
-          <ul class="telemetry__metrics">
-            <li><span>Signal Integrity</span><strong>99.3%</strong></li>
-            <li><span>Bandwidth</span><strong>4.6 MB/s</strong></li>
-            <li><span>Load</span><strong>31%</strong></li>
-          </ul>
-        </article>
+        <section id="advanced-systems">
+            <h2>4. Advanced Subsystems</h2>
+            <p>Technical nomenclature for internal system modules (mapped from project-specific naming conventions).</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Module Name</th>
+                        <th>System Function</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>recursive_learning.py</code></td>
+                        <td><strong>Contextual Memory (RAG)</strong></td>
+                        <td>Stores successful task inputs/outputs in SQLite/ChromaDB for retrieval based on context similarity.</td>
+                    </tr>
+                    <tr>
+                        <td><code>adaptive_jit.py</code></td>
+                        <td><strong>Smart Memoization</strong></td>
+                        <td>Profiles function calls and applies LRU/TTL caching strategies to hot paths.</td>
+                    </tr>
+                    <tr>
+                        <td><code>zero_reasoning.py</code></td>
+                        <td><strong>Structured Prompting</strong></td>
+                        <td>Orchestrates Chain-of-Thought (CoT) and Tree-of-Thought (ToT) prompts to improve LLM output reliability.</td>
+                    </tr>
+                    <tr>
+                        <td><code>self_healing.py</code></td>
+                        <td><strong>Fault Tolerance</strong></td>
+                        <td>Implements Circuit Breaker patterns and exponential backoff retry policies.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
 
-        <article class="panel workflows" data-tilt>
-          <div class="panel__header">
-            <p class="eyebrow">Workflow Library</p>
-            <button class="micro-btn">Browse Templates</button>
-          </div>
-          <div class="workflow-grid">
-            <div>
-              <span>Editorial Dossier</span>
-              <small>Multi-source synthesis · 4 stages</small>
-            </div>
-            <div>
-              <span>Product Spec Draft</span>
-              <small>Research → Wireframe → Copy</small>
-            </div>
-            <div>
-              <span>Ops Health Pulse</span>
-              <small>Metrics → Insight → Broadcast</small>
-            </div>
-            <div>
-              <span>Code Warm Start</span>
-              <small>Scope → Scaffold → Validate</small>
-            </div>
-          </div>
-        </article>
+        <section id="usage">
+            <h2>5. Interface & Execution</h2>
+            
+            <h3>Headless Mode (CLI)</h3>
+            <pre><code>python src/main.py --interactive --llm-provider ollama --model-name llama3.2</code></pre>
+            
+            <h3>Graphical Interface</h3>
+            <p><strong>Entry Point:</strong> <code>src/gui_app.py</code></p>
+            <p>The GUI provides a visual wrapper for the <code>AgentEngine</code>, offering real-time log streaming, workflow history visualization, and agent status indicators. It utilizes <code>customtkinter</code> for rendering.</p>
+        </section>
 
-        <article class="panel clay" data-tilt>
-          <p class="eyebrow">Tactile Controls</p>
-          <div class="toggle-group">
-            <label class="toggle">
-              <input type="checkbox" checked />
-              <span>Insight Boost</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" />
-              <span>Safe Mode</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" checked />
-              <span>Realtime Logs</span>
-            </label>
-          </div>
-          <div class="knob" data-knob>
-            <span>Accent Intensity</span>
-            <div class="dial">
-              <div class="dial__pointer"></div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="system-panel" data-tilt>
-        <div>
-          <p class="eyebrow">Activity Ledger</p>
-          <ol class="timeline" id="timeline">
-            <li>
-              <span>10:14</span>
-              <div>
-                <strong>Insight Mesh</strong>
-                <p>Reconciled 14 narrative fragments into 3 briefs.</p>
-              </div>
-            </li>
-            <li>
-              <span>10:09</span>
-              <div>
-                <strong>Refactor Pulse</strong>
-                <p>Code agent optimized async fan-out (31% faster).</p>
-              </div>
-            </li>
-            <li>
-              <span>09:55</span>
-              <div>
-                <strong>Archive Sweep</strong>
-                <p>Filesystem agent versioned research corpus.</p>
-              </div>
-            </li>
-          </ol>
-        </div>
-        <div class="pillars">
-          <article>
-            <h3>Editorial Integrity</h3>
-            <p>
-              Swiss-grid typography with brutalist pacing ensures the surface is
-              readable, assertive, and unmistakably modern.
-            </p>
-          </article>
-          <article>
-            <h3>Clay Skeuomorphism</h3>
-            <p>
-              Panels feel sculpted with soft extrusions, layered shadows, and
-              tactile toggles inviting confident interaction.
-            </p>
-          </article>
-          <article>
-            <h3>Modular Systems</h3>
-            <p>
-              Everything snaps to a responsive 12-column matrix, enabling rapid
-              reconfiguration without losing rigor.
-            </p>
-          </article>
-        </div>
-      </section>
     </main>
 
-    <footer>
-      <p>ASTRO · Autonomous Agent Ecosystem</p>
-      <p>Hand-crafted brutalist interface · © 2024</p>
+    <footer style="margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border-color); font-size: 0.9em; color: var(--secondary-color);">
+        <p>Generated by C0Di3 | Based on Codebase Revision: <code>81bc118</code></p>
     </footer>
 
-    <script src="app.js" type="module"></script>
-  </body>
+</body>
 </html>
