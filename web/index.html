@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASTRO · Modular Command Surface</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="grain"></div>
+
+    <header class="hero" data-tilt>
+      <div class="hero__brand">
+        <span class="mark">ASTRO</span>
+        <span class="badge">AU · 24</span>
+      </div>
+      <div class="hero__copy">
+        <p class="eyebrow">Brutalist multi-agent operations surface</p>
+        <h1>
+          Modular Swiss grid precision fused with clay-sculpted tactility for
+          modern autonomy.
+        </h1>
+        <p>
+          A comprehensive, editorially curated control desk for orchestrating AI
+          research, code, and workflow agents with confidence.
+        </p>
+      </div>
+      <div class="hero__cta">
+        <a href="/assistant" class="btn btn--primary" data-tilt>
+          Start Chatting
+        </a>
+        <button class="btn btn--ghost" data-tilt data-action="start-system" id="deploy-btn">
+          Deploy Agents
+        </button>
+      </div>
+      <dl class="hero__stats">
+        <div>
+          <dt>Agents Live</dt>
+          <dd>03</dd>
+        </div>
+        <div>
+          <dt>Latency Median</dt>
+          <dd>1.4 s</dd>
+        </div>
+        <div>
+          <dt>Confidence Index</dt>
+          <dd>97%</dd>
+        </div>
+      </dl>
+    </header>
+
+    <section class="access-grid">
+      <header>
+        <p class="eyebrow">Access Points</p>
+        <h2>Choose how you want to engage the ASTRO collective</h2>
+        <p>
+          Jump straight into a conversational workspace, orchestrate workflows,
+          browse your knowledge vault, or manage generated files—just like
+          ChatGPT's multi-surface entry but tuned for agents.
+        </p>
+      </header>
+      <div class="access-grid__cards">
+        <article class="access-card" data-tilt>
+          <div class="access-card__meta">
+            <span class="tag">AI Assistant</span>
+            <span class="version">NEW</span>
+          </div>
+          <h3>Chat with ASTRO</h3>
+          <p>
+            Simple, intuitive conversations. Research, write, code, and analyze
+            with natural language—no technical knowledge required.
+          </p>
+          <a href="/assistant" class="btn btn--ghost">Start chatting</a>
+        </article>
+        <article class="access-card" data-tilt>
+          <div class="access-card__meta">
+            <span class="tag">Workflow Canvas</span>
+            <span class="version">beta</span>
+          </div>
+          <h3>Structured orchestration</h3>
+          <p>
+            Chain multi-step missions with Swiss-grid clarity and watch agents
+            execute in parallel lanes.
+          </p>
+          <button class="btn btn--ghost" data-route="/workflows">Open canvas</button>
+        </article>
+        <article class="access-card" data-tilt>
+          <div class="access-card__meta">
+            <span class="tag">Knowledge Vault</span>
+            <span class="version">sync</span>
+          </div>
+          <h3>Curated intelligence layers</h3>
+          <p>
+            Surface past research, tagged briefs, and auto-updated dossiers for
+            rapid recall.
+          </p>
+          <button class="btn btn--ghost" data-route="/vault">Review briefs</button>
+        </article>
+        <article class="access-card" data-tilt>
+          <div class="access-card__meta">
+            <span class="tag">File Atelier</span>
+            <span class="version">ops</span>
+          </div>
+          <h3>Artifact supervision</h3>
+          <p>
+            Manage generated files, compare revisions, and publish outputs to
+            the distribution rail.
+          </p>
+          <button class="btn btn--ghost" data-route="/files">Inspect artifacts</button>
+        </article>
+      </div>
+    </section>
+
+    <main id="app-content">
+      <section class="dashboard-grid">
+        <article class="panel mission" data-tilt>
+          <div class="panel__header">
+            <p class="eyebrow">Mission Directive</p>
+            <span class="badge badge--holo">Editorial Capsule</span>
+          </div>
+          <h2>Autonomous Research Sprint · Orbit 12</h2>
+          <p>
+            Investigate emergent LLM coordination patterns across distributed
+            inference stacks. Synthesize actionable heuristics.
+          </p>
+          <ul class="pill-list">
+            <li>Research</li>
+            <li>Code</li>
+            <li>Observability</li>
+          </ul>
+          <div class="progress">
+            <span>72% completion</span>
+            <div class="progress__bar"><span style="width: 72%"></span></div>
+          </div>
+        </article>
+
+        <article class="panel console" data-tilt>
+          <div class="panel__header">
+            <p class="eyebrow">Command Console</p>
+            <span class="badge badge--dark">Live</span>
+          </div>
+          <form id="command-form">
+            <label class="console__label" for="command-input"
+              >Compose next instruction</label
+            >
+            <div class="console__input">
+              <input
+                id="command-input"
+                name="command"
+                type="text"
+                placeholder="Design a comparative insight brief on federated agents"
+                autocomplete="off"
+              />
+              <button type="submit">Execute</button>
+            </div>
+          </form>
+          <div class="console__log" id="console-log">
+            <p><span>[10:14]</span> Research agent mapped 6 trusted sources.</p>
+            <p>
+              <span>[10:12]</span> Filesystem agent archived prior transcript to
+              /reports.
+            </p>
+            <p><span>[10:09]</span> Code agent refactored async orchestrator.</p>
+          </div>
+        </article>
+
+        <article class="panel agents" data-tilt>
+          <div class="panel__header">
+            <p class="eyebrow">Agent Stack</p>
+            <button class="micro-btn">+ Add</button>
+          </div>
+          <ul class="agent-list">
+            <li>
+              <div>
+                <span>🔬 Research · 001</span>
+                <small>Deepcrawl / Contextual synthesis</small>
+              </div>
+              <span class="status status--online">Online</span>
+            </li>
+            <li>
+              <div>
+                <span>💻 Code · 001</span>
+                <small>Python · QA harness</small>
+              </div>
+              <span class="status status--busy">Refining</span>
+            </li>
+            <li>
+              <div>
+                <span>📁 File · 001</span>
+                <small>Structured storage / Render</small>
+              </div>
+              <span class="status status--idle">Idle</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="panel telemetry" data-tilt>
+          <div class="panel__header">
+            <p class="eyebrow">Telemetry Trace</p>
+          </div>
+          <div class="telemetry__chart">
+            <div class="wave" aria-hidden="true"></div>
+            <div class="wave wave--offset" aria-hidden="true"></div>
+          </div>
+          <ul class="telemetry__metrics">
+            <li><span>Signal Integrity</span><strong>99.3%</strong></li>
+            <li><span>Bandwidth</span><strong>4.6 MB/s</strong></li>
+            <li><span>Load</span><strong>31%</strong></li>
+          </ul>
+        </article>
+
+        <article class="panel workflows" data-tilt>
+          <div class="panel__header">
+            <p class="eyebrow">Workflow Library</p>
+            <button class="micro-btn">Browse Templates</button>
+          </div>
+          <div class="workflow-grid">
+            <div>
+              <span>Editorial Dossier</span>
+              <small>Multi-source synthesis · 4 stages</small>
+            </div>
+            <div>
+              <span>Product Spec Draft</span>
+              <small>Research → Wireframe → Copy</small>
+            </div>
+            <div>
+              <span>Ops Health Pulse</span>
+              <small>Metrics → Insight → Broadcast</small>
+            </div>
+            <div>
+              <span>Code Warm Start</span>
+              <small>Scope → Scaffold → Validate</small>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel clay" data-tilt>
+          <p class="eyebrow">Tactile Controls</p>
+          <div class="toggle-group">
+            <label class="toggle">
+              <input type="checkbox" checked />
+              <span>Insight Boost</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" />
+              <span>Safe Mode</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" checked />
+              <span>Realtime Logs</span>
+            </label>
+          </div>
+          <div class="knob" data-knob>
+            <span>Accent Intensity</span>
+            <div class="dial">
+              <div class="dial__pointer"></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="system-panel" data-tilt>
+        <div>
+          <p class="eyebrow">Activity Ledger</p>
+          <ol class="timeline" id="timeline">
+            <li>
+              <span>10:14</span>
+              <div>
+                <strong>Insight Mesh</strong>
+                <p>Reconciled 14 narrative fragments into 3 briefs.</p>
+              </div>
+            </li>
+            <li>
+              <span>10:09</span>
+              <div>
+                <strong>Refactor Pulse</strong>
+                <p>Code agent optimized async fan-out (31% faster).</p>
+              </div>
+            </li>
+            <li>
+              <span>09:55</span>
+              <div>
+                <strong>Archive Sweep</strong>
+                <p>Filesystem agent versioned research corpus.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="pillars">
+          <article>
+            <h3>Editorial Integrity</h3>
+            <p>
+              Swiss-grid typography with brutalist pacing ensures the surface is
+              readable, assertive, and unmistakably modern.
+            </p>
+          </article>
+          <article>
+            <h3>Clay Skeuomorphism</h3>
+            <p>
+              Panels feel sculpted with soft extrusions, layered shadows, and
+              tactile toggles inviting confident interaction.
+            </p>
+          </article>
+          <article>
+            <h3>Modular Systems</h3>
+            <p>
+              Everything snaps to a responsive 12-column matrix, enabling rapid
+              reconfiguration without losing rigor.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>ASTRO · Autonomous Agent Ecosystem</p>
+      <p>Hand-crafted brutalist interface · © 2024</p>
+    </footer>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

@@ -106,12 +106,41 @@ class DatabaseManager:
                       value TEXT,
                       updated_at TIMESTAMP)''')
                       
+        # Chat sessions table
+        c.execute('''CREATE TABLE IF NOT EXISTS chat_sessions
+                     (session_id TEXT PRIMARY KEY,
+                      created_at TIMESTAMP,
+                      last_active TIMESTAMP)''')
+        
+        # Chat messages table
+        c.execute('''CREATE TABLE IF NOT EXISTS chat_messages
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      session_id TEXT,
+                      message_id TEXT UNIQUE,
+                      role TEXT,
+                      content TEXT,
+                      timestamp TIMESTAMP,
+                      FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id))''')
+        
+        # Knowledge items table
+        c.execute('''CREATE TABLE IF NOT EXISTS knowledge_items
+                     (id TEXT PRIMARY KEY,
+                      title TEXT,
+                      content TEXT,
+                      type TEXT,
+                      tags TEXT,
+                      summary TEXT,
+                      created_at TIMESTAMP,
+                      updated_at TIMESTAMP)''')
+        
         # Create Indices
         c.execute('CREATE INDEX IF NOT EXISTS idx_tasks_workflow_id ON tasks(workflow_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_tasks_assigned_agent ON tasks(assigned_agent)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_metrics_agent_id ON metrics(agent_id)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_knowledge_items_type ON knowledge_items(type)')
                       
         conn.commit()
         conn.close()
@@ -479,6 +508,191 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Restore failed: {e}")
             return False
+    
+    # ========== CHAT SESSION PERSISTENCE ==========
+    
+    async def save_chat_message_async(self, session_id: str, message_id: str, role: str, 
+                                       content: str, timestamp: str) -> bool:
+        """Save a chat message to the database."""
+        await self._ensure_async_init()
+        
+        # Ensure session exists
+        session_sql = '''INSERT OR IGNORE INTO chat_sessions (session_id, created_at, last_active)
+                        VALUES (?, ?, ?)'''
+        message_sql = '''INSERT OR REPLACE INTO chat_messages 
+                        (session_id, message_id, role, content, timestamp)
+                        VALUES (?, ?, ?, ?, ?)'''
+        now = datetime.now().isoformat()
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(session_sql, (session_id, now, now))
+                await db.execute(message_sql, (session_id, message_id, role, content, timestamp))
+                await db.execute(
+                    'UPDATE chat_sessions SET last_active = ? WHERE session_id = ?',
+                    (now, session_id)
+                )
+                await db.commit()
+                return True
+        else:
+            def _sync_save():
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute(session_sql, (session_id, now, now))
+                    conn.execute(message_sql, (session_id, message_id, role, content, timestamp))
+                    conn.execute(
+                        'UPDATE chat_sessions SET last_active = ? WHERE session_id = ?',
+                        (now, session_id)
+                    )
+                    conn.commit()
+                    return True
+            return await asyncio.to_thread(_sync_save)
+    
+    async def get_chat_history_async(self, session_id: str, limit: int = 100) -> List[Dict]:
+        """Get chat history for a session."""
+        await self._ensure_async_init()
+        sql = '''SELECT message_id, role, content, timestamp 
+                 FROM chat_messages WHERE session_id = ?
+                 ORDER BY id ASC LIMIT ?'''
+        params = (session_id, limit)
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(sql, params) as cursor:
+                    rows = await cursor.fetchall()
+                    return [
+                        {"id": row[0], "role": row[1], "content": row[2], "timestamp": row[3]}
+                        for row in rows
+                    ]
+        else:
+            def _sync_read():
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.execute(sql, params)
+                    return cursor.fetchall()
+            rows = await asyncio.to_thread(_sync_read)
+            return [
+                {"id": row[0], "role": row[1], "content": row[2], "timestamp": row[3]}
+                for row in rows
+            ]
+    
+    async def get_all_sessions_async(self) -> List[Dict]:
+        """Get all chat sessions."""
+        await self._ensure_async_init()
+        sql = 'SELECT session_id, created_at, last_active FROM chat_sessions ORDER BY last_active DESC'
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(sql) as cursor:
+                    rows = await cursor.fetchall()
+                    return [
+                        {"session_id": row[0], "created_at": row[1], "last_active": row[2]}
+                        for row in rows
+                    ]
+        else:
+            def _sync_read():
+                with sqlite3.connect(self.db_path) as conn:
+                    return conn.execute(sql).fetchall()
+            rows = await asyncio.to_thread(_sync_read)
+            return [
+                {"session_id": row[0], "created_at": row[1], "last_active": row[2]}
+                for row in rows
+            ]
+    
+    # ========== KNOWLEDGE ITEM PERSISTENCE ==========
+    
+    async def save_knowledge_item_async(self, item_id: str, title: str, content: str,
+                                         item_type: str, tags: List[str], summary: str) -> bool:
+        """Save a knowledge item to the database."""
+        await self._ensure_async_init()
+        sql = '''INSERT OR REPLACE INTO knowledge_items 
+                (id, title, content, type, tags, summary, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 
+                        COALESCE((SELECT created_at FROM knowledge_items WHERE id = ?), ?), ?)'''
+        now = datetime.now().isoformat()
+        tags_json = json.dumps(tags)
+        params = (item_id, title, content, item_type, tags_json, summary, item_id, now, now)
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(sql, params)
+                await db.commit()
+                return True
+        else:
+            def _sync_save():
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute(sql, params)
+                    conn.commit()
+                    return True
+            return await asyncio.to_thread(_sync_save)
+    
+    async def get_knowledge_items_async(self, query: Optional[str] = None, 
+                                         item_type: Optional[str] = None,
+                                         limit: int = 100) -> List[Dict]:
+        """Get knowledge items with optional filtering."""
+        await self._ensure_async_init()
+        
+        sql = 'SELECT id, title, content, type, tags, summary, created_at FROM knowledge_items'
+        conditions = []
+        params = []
+        
+        if query:
+            conditions.append('(title LIKE ? OR content LIKE ? OR tags LIKE ?)')
+            query_pattern = f'%{query}%'
+            params.extend([query_pattern, query_pattern, query_pattern])
+        
+        if item_type:
+            conditions.append('type = ?')
+            params.append(item_type)
+        
+        if conditions:
+            sql += ' WHERE ' + ' AND '.join(conditions)
+        
+        sql += ' ORDER BY created_at DESC LIMIT ?'
+        params.append(limit)
+        
+        def _parse_row(row) -> Dict:
+            try:
+                tags = json.loads(row[4]) if row[4] else []
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+            return {
+                "id": row[0],
+                "title": row[1],
+                "content": row[2],
+                "type": row[3],
+                "tags": tags,
+                "summary": row[5],
+                "created_at": row[6],
+            }
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(sql, params) as cursor:
+                    rows = await cursor.fetchall()
+                    return [_parse_row(row) for row in rows]
+        else:
+            def _sync_read():
+                with sqlite3.connect(self.db_path) as conn:
+                    return conn.execute(sql, params).fetchall()
+            rows = await asyncio.to_thread(_sync_read)
+            return [_parse_row(row) for row in rows]
+    
+    async def delete_knowledge_item_async(self, item_id: str) -> bool:
+        """Delete a knowledge item."""
+        await self._ensure_async_init()
+        sql = 'DELETE FROM knowledge_items WHERE id = ?'
+        
+        if HAS_AIOSQLITE:
+            async with aiosqlite.connect(self.db_path) as db:
+                cursor = await db.execute(sql, (item_id,))
+                await db.commit()
+                return cursor.rowcount > 0
+        else:
+            def _sync_delete():
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.execute(sql, (item_id,))
+                    conn.commit()
+                    return cursor.rowcount > 0
+            return await asyncio.to_thread(_sync_delete)
 
 # CLI interface
 if __name__ == "__main__":

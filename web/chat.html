@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASTRO · AI Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="chat-ui.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+            <circle cx="16" cy="16" r="6" fill="currentColor"/>
+            <path d="M16 2V8M16 24V30M2 16H8M24 16H30" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <span>ASTRO</span>
+        </div>
+        <button class="new-chat-btn" id="new-chat-btn" title="New conversation">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="sidebar-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" placeholder="Search conversations..." id="search-input">
+      </div>
+      
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <h3>Today</h3>
+          <ul class="conversation-list" id="today-conversations"></ul>
+        </div>
+        <div class="nav-section">
+          <h3>Previous 7 Days</h3>
+          <ul class="conversation-list" id="week-conversations"></ul>
+        </div>
+        <div class="nav-section">
+          <h3>Older</h3>
+          <ul class="conversation-list" id="older-conversations"></ul>
+        </div>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <button class="sidebar-btn" id="capabilities-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+          </svg>
+          <span>Capabilities</span>
+        </button>
+        <button class="sidebar-btn" id="settings-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+    
+    <!-- Main Chat Area -->
+    <main class="main-content">
+      <!-- Welcome Screen (shown when no conversation) -->
+      <div class="welcome-screen" id="welcome-screen">
+        <div class="welcome-logo">
+          <svg width="64" height="64" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="16" cy="16" r="6" fill="currentColor"/>
+            <path d="M16 2V8M16 24V30M2 16H8M24 16H30" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <h1>How can I help you today?</h1>
+        <p class="welcome-subtitle">I'm ASTRO, your AI assistant. I can help with research, writing, coding, analysis, and much more.</p>
+        
+        <div class="capability-cards">
+          <button class="capability-card" data-prompt="Help me research">
+            <div class="capability-icon">🔍</div>
+            <h3>Research</h3>
+            <p>Find information, summarize articles, explore topics</p>
+          </button>
+          <button class="capability-card" data-prompt="Help me write">
+            <div class="capability-icon">✍️</div>
+            <h3>Write</h3>
+            <p>Draft emails, documents, creative content</p>
+          </button>
+          <button class="capability-card" data-prompt="Help me code">
+            <div class="capability-icon">💻</div>
+            <h3>Code</h3>
+            <p>Write, debug, and explain code in any language</p>
+          </button>
+          <button class="capability-card" data-prompt="Help me analyze">
+            <div class="capability-icon">📊</div>
+            <h3>Analyze</h3>
+            <p>Process data, create reports, find insights</p>
+          </button>
+        </div>
+        
+        <div class="quick-prompts">
+          <h4>Try asking:</h4>
+          <div class="prompt-chips">
+            <button class="prompt-chip" data-prompt="Explain quantum computing in simple terms">Explain quantum computing simply</button>
+            <button class="prompt-chip" data-prompt="Write a Python function to sort a list">Write a Python sort function</button>
+            <button class="prompt-chip" data-prompt="Help me draft a professional email">Draft a professional email</button>
+            <button class="prompt-chip" data-prompt="What are the latest trends in AI?">Latest AI trends</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Chat Messages Container -->
+      <div class="chat-container hidden" id="chat-container">
+        <div class="messages-wrapper" id="messages-wrapper">
+          <!-- Messages will be inserted here -->
+        </div>
+      </div>
+      
+      <!-- Input Area -->
+      <div class="input-area">
+        <div class="input-container">
+          <div class="input-actions-left">
+            <button class="input-action-btn" id="attach-btn" title="Attach file">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <input type="file" id="file-input" multiple hidden>
+          </div>
+          
+          <div class="input-wrapper">
+            <textarea 
+              id="message-input" 
+              placeholder="Message ASTRO..." 
+              rows="1"
+              autofocus
+            ></textarea>
+            <div class="attached-files" id="attached-files"></div>
+          </div>
+          
+          <div class="input-actions-right">
+            <button class="send-btn" id="send-btn" disabled title="Send message">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="input-hint">ASTRO can make mistakes. Consider checking important information.</p>
+      </div>
+    </main>
+    
+    <!-- Capabilities Modal -->
+    <div class="modal-overlay hidden" id="capabilities-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>What ASTRO Can Do</h2>
+          <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="capability-section">
+            <h3>🔍 Research & Information</h3>
+            <ul>
+              <li>Search the web for current information</li>
+              <li>Summarize articles and documents</li>
+              <li>Answer questions on any topic</li>
+              <li>Compare and analyze sources</li>
+            </ul>
+          </div>
+          <div class="capability-section">
+            <h3>✍️ Writing & Content</h3>
+            <ul>
+              <li>Draft emails, reports, and documents</li>
+              <li>Edit and improve your writing</li>
+              <li>Generate creative content</li>
+              <li>Translate between languages</li>
+            </ul>
+          </div>
+          <div class="capability-section">
+            <h3>💻 Coding & Technical</h3>
+            <ul>
+              <li>Write code in any programming language</li>
+              <li>Debug and fix code issues</li>
+              <li>Explain code and concepts</li>
+              <li>Execute code safely in sandbox</li>
+            </ul>
+          </div>
+          <div class="capability-section">
+            <h3>📊 Analysis & Data</h3>
+            <ul>
+              <li>Analyze data and find patterns</li>
+              <li>Create charts and visualizations</li>
+              <li>Process files (CSV, JSON, etc.)</li>
+              <li>Generate reports and insights</li>
+            </ul>
+          </div>
+          <div class="capability-section">
+            <h3>🤖 Agents & Automation</h3>
+            <ul>
+              <li>Multi-step task execution</li>
+              <li>Workflow automation</li>
+              <li>File management</li>
+              <li>Scheduled operations</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settings-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section">
+            <h3>Appearance</h3>
+            <label class="setting-item">
+              <span>Theme</span>
+              <select id="theme-select">
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <label class="setting-item">
+              <span>Font Size</span>
+              <select id="font-size-select">
+                <option value="small">Small</option>
+                <option value="medium" selected>Medium</option>
+                <option value="large">Large</option>
+              </select>
+            </label>
+          </div>
+          <div class="settings-section">
+            <h3>Behavior</h3>
+            <label class="setting-item toggle-setting">
+              <span>Enable sound effects</span>
+              <input type="checkbox" id="sound-toggle">
+            </label>
+            <label class="setting-item toggle-setting">
+              <span>Show typing indicator</span>
+              <input type="checkbox" id="typing-toggle" checked>
+            </label>
+            <label class="setting-item toggle-setting">
+              <span>Auto-scroll to new messages</span>
+              <input type="checkbox" id="autoscroll-toggle" checked>
+            </label>
+          </div>
+          <div class="settings-section">
+            <h3>Data & Privacy</h3>
+            <button class="settings-btn danger" id="clear-history-btn">Clear conversation history</button>
+            <button class="settings-btn" id="export-data-btn">Export my data</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="chat-app.js" type="module"></script>
+</body>
+</html>

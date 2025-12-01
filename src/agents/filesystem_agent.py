@@ -85,7 +85,7 @@ class FileSystemAgent(BaseAgent):
             # Ensure parent dir exists (async)
             parent_dir = os.path.dirname(full_path)
             if not os.path.exists(parent_dir):
-                await asyncio.get_event_loop().run_in_executor(None, os.makedirs, parent_dir, 0o777, True)
+                await asyncio.to_thread(os.makedirs, parent_dir, 0o755, True)
             
             async with aiofiles.open(full_path, 'w', encoding='utf-8') as f:
                 await f.write(content)
@@ -124,7 +124,7 @@ class FileSystemAgent(BaseAgent):
         
         try:
             # Run blocking os.listdir in thread pool
-            items = await asyncio.get_event_loop().run_in_executor(None, os.listdir, full_path)
+            items = await asyncio.to_thread(os.listdir, full_path)
             return TaskResult(success=True, result_data={'items': items})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))
@@ -141,7 +141,7 @@ class FileSystemAgent(BaseAgent):
         full_path = os.path.join(self.root_dir, path)
         
         try:
-            await asyncio.get_event_loop().run_in_executor(None, os.makedirs, full_path, 0o777, True)
+            await asyncio.to_thread(os.makedirs, full_path, 0o755, True)
             return TaskResult(success=True, result_data={'path': path})
         except Exception as e:
             return TaskResult(success=False, error_message=str(e))
