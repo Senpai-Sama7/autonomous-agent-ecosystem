@@ -706,7 +706,7 @@ const Views = {
     const settings = state.get('settings');
     return `
       <article class="panel clay">
-        <p class="eyebrow">Tactile Controls</p>
+        <p class="eyebrow">System Controls</p>
         <div class="toggle-group">
           <label class="toggle">
             <input type="checkbox" data-setting="insightBoost" ${settings.insightBoost ? 'checked' : ''} />
@@ -775,7 +775,7 @@ const Views = {
       <div class="chat-view">
         <header class="chat-header">
           <button class="back-btn" data-route="/">← Back</button>
-          <h1>Chat Studio</h1>
+          <h1>Agent Chat</h1>
           <span class="badge">${state.get('wsConnected') ? 'Live' : 'Offline'}</span>
         </header>
         <div class="chat-messages" id="chat-messages">
@@ -866,7 +866,7 @@ const Views = {
       <div class="files-view">
         <header class="view-header">
           <button class="back-btn" data-route="/">← Back</button>
-          <h1>File Atelier</h1>
+          <h1>Files &amp; Artifacts</h1>
           <button class="btn btn--ghost" data-action="refresh-files">Refresh</button>
         </header>
         <div class="files-browser">
@@ -1081,10 +1081,10 @@ const Handlers = {
 
     const tag = card.querySelector('.tag')?.textContent;
     const routes = {
-      'Chat Studio': '/chat',
+      'AI Assistant': '/assistant',
       'Workflow Canvas': '/workflows',
-      'Knowledge Vault': '/vault',
-      'File Atelier': '/files',
+      'Knowledge': '/vault',
+      'Files': '/files',
     };
 
     if (routes[tag]) {
