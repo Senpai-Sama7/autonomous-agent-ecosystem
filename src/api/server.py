@@ -207,6 +207,16 @@ async def lifespan(app: FastAPI):
     # Initialize database
     app_state.db = DatabaseManager()
     
+    # Initialize LLM client (Ollama by default)
+    provider = os.getenv("LLM_PROVIDER", "ollama")
+    model = os.getenv("LLM_MODEL", "llama3.2")
+    app_state.llm_client = LLMFactory.create_client(provider=provider)
+    app_state.llm_model = model
+    if app_state.llm_client:
+        logger.info(f"LLM client initialized: {provider}/{model}")
+    else:
+        logger.warning("No LLM client available - chat will be limited")
+    
     # Initialize engine
     app_state.engine = AgentEngine()
     
@@ -577,6 +587,16 @@ def register_routes(app: FastAPI):
         
         app_state.running = True
         
+        # Initialize NL interface with LLM client for agent orchestration
+        if app_state.llm_client and not app_state.nl_interface:
+            model = getattr(app_state, 'llm_model', 'llama3.2')
+            app_state.nl_interface = NaturalLanguageInterface(
+                engine=app_state.engine,
+                llm_client=app_state.llm_client,
+                model_name=model
+            )
+            logger.info("NL Interface initialized for agent orchestration")
+        
         # Start the engine in background
         asyncio.create_task(app_state.engine.start_engine())
         
@@ -828,7 +848,7 @@ def register_routes(app: FastAPI):
     
     @app.post("/api/chat/message")
     async def send_chat_message(request: ChatMessageRequest):
-        """Send a chat message and get a response."""
+        """Send a chat message and get a response via real LLM inference."""
         session_id = request.session_id
         
         if session_id not in app_state.chat_sessions:
@@ -853,15 +873,8 @@ def register_routes(app: FastAPI):
             except Exception as e:
                 logger.warning(f"Failed to persist user message: {e}")
         
-        # Process through NL interface if running
-        if app_state.running and app_state.nl_interface:
-            try:
-                workflow_id = await app_state.nl_interface.process_request(request.message)
-                response_content = f"I've created workflow {workflow_id} to handle your request. The agents are now working on it."
-            except Exception as e:
-                response_content = f"I encountered an issue: {str(e)}. Please try rephrasing your request."
-        else:
-            response_content = "The system is not running. Please start the system first using the 'Deploy the Collective' button."
+        # Real LLM inference
+        response_content = await _generate_chat_response(session_id, request.message)
         
         assistant_timestamp = datetime.now().strftime("%H:%M")
         assistant_message = {
@@ -886,6 +899,44 @@ def register_routes(app: FastAPI):
         await manager.broadcast("chat_message", assistant_message)
         
         return {"message": response_content, "session_id": session_id}
+    
+    async def _generate_chat_response(session_id: str, user_message: str) -> str:
+        """Generate response using Ollama/OpenAI with conversation history."""
+        if not app_state.llm_client:
+            return "LLM not configured. Please ensure Ollama is running or set an API key."
+        
+        # Build conversation history (last 20 messages for context)
+        history = app_state.chat_sessions.get(session_id, [])[-20:]
+        
+        system_prompt = """You are ASTRO, an advanced AI assistant with access to specialized agents:
+- Research Agent: Web search, content extraction, summarization
+- Code Agent: Python code generation and execution (Docker sandboxed)
+- FileSystem Agent: File read/write operations in workspace
+- Git Agent: Version control operations
+- Test Agent: Run test suites
+- Analysis Agent: Code linting and static analysis
+- Knowledge Agent: Persistent memory storage
+
+You can help with research, coding, file management, and general questions.
+Be helpful, accurate, and concise. When tasks require agent capabilities, explain what you're doing."""
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history[:-1]:  # Exclude the just-added user message
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+        
+        try:
+            model = getattr(app_state, 'llm_model', 'llama3.2')
+            response = await app_state.llm_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2048,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"LLM inference failed: {e}")
+            return f"I encountered an error: {str(e)}. Please check that Ollama is running."
     
     # ========================================================================
     # KNOWLEDGE ROUTES
