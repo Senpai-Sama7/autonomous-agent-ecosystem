@@ -3,16 +3,40 @@ name: Build Release Artifacts
 on:
   push:
     tags:
-      - 'v*'  # Triggers on tags like v1.0.0
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Build for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  build-linux:
+    name: Build Linux (.deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          
+      - name: Build .deb Package
+        run: |
+          chmod +x build_deb.sh
+          ./build_deb.sh
+          
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASTRO-Linux-deb
+          path: astro_2.0.0_amd64.deb
 
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       
@@ -29,8 +53,54 @@ jobs:
       - name: Build Executable
         run: pyinstaller astro.spec --clean
         
-      - name: Upload Artifacts
+      - name: Upload Windows Executable
         uses: actions/upload-artifact@v4
         with:
-          name: ASTRO-${{ matrix.os }}
-          path: dist/
+          name: ASTRO-Windows-exe
+          path: dist/ASTRO.exe
+
+  build-macos:
+    name: Build macOS (.app)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          
+      - name: Build macOS App
+        run: pyinstaller astro.spec --clean
+        
+      - name: Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASTRO-macOS-app
+          path: dist/ASTRO.app
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ASTRO-Linux-deb/astro_2.0.0_amd64.deb
+            ASTRO-Windows-exe/ASTRO.exe
+            ASTRO-macOS-app/ASTRO.app
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

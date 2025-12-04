@@ -1,11 +1,11 @@
 #!/bin/bash
 # ASTRO - Build Debian Package (.deb)
-# Run this script to create astro_1.0.0_amd64.deb
+# Run this script to create astro_2.0.0_amd64.deb
 
 set -e
 
 echo "============================================"
-echo "  ASTRO - Building Debian Package"
+echo "  ASTRO v2.0 - Building Debian Package"
 echo "============================================"
 
 # Get the directory where the script is located
@@ -24,6 +24,9 @@ cp requirements.txt debian/usr/share/astro/
 cp README.md debian/usr/share/astro/
 cp LICENSE debian/usr/share/astro/
 
+# Create workspace directory
+mkdir -p debian/usr/share/astro/workspace/knowledge
+
 # Set permissions
 echo "Setting permissions..."
 chmod 755 debian/DEBIAN/postinst
@@ -32,16 +35,16 @@ chmod 755 debian/usr/bin/astro
 
 # Build the package
 echo "Building .deb package..."
-dpkg-deb --build debian astro_1.0.0_amd64.deb
+dpkg-deb --build debian astro_2.0.0_amd64.deb
 
 echo ""
 echo "============================================"
 echo "  Build Complete!"
 echo "============================================"
-echo "  Package: astro_1.0.0_amd64.deb"
+echo "  Package: astro_2.0.0_amd64.deb"
 echo ""
 echo "  To install:"
-echo "    sudo dpkg -i astro_1.0.0_amd64.deb"
+echo "    sudo dpkg -i astro_2.0.0_amd64.deb"
 echo "    sudo apt-get install -f  # Fix dependencies"
 echo ""
 echo "  To run:"

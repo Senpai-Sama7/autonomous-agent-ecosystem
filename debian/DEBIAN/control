@@ -1,5 +1,5 @@
 Package: astro
-Version: 1.0.0
+Version: 2.0.0
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -7,12 +7,12 @@ Depends: python3 (>= 3.10), python3-pip, python3-venv, python3-tk
 Maintainer: ASTRO Team <astro@example.com>
 Description: ASTRO - Autonomous Agent Ecosystem
  Your personal AI team that can research the internet,
- write code, and manage files - all from natural language commands.
+ write code, manage files, run tests, and more - all from natural language.
  .
  Features:
-  - Research Agent: Web search and content extraction
-  - Code Agent: Python code generation and execution
-  - File Agent: Safe file operations
-  - Natural Language Interface: Just type what you want
-  - Beautiful Modern GUI with dark theme
-Homepage: https://github.com/Senpai-Sama7/autonomous-agent-ecosystem
+  - 7 Specialized Agents (Research, Code, Files, Git, Test, Analysis, Knowledge)
+  - Secure Docker sandbox for code execution
+  - Connection pooling and thread-safe operations
+  - Beautiful glassmorphic GUI with dark theme
+  - 21/21 tests passing - Production Ready
+Homepage: https://github.com/Senpai-Sama7/Astro

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-ASTRO - Autonomous Agent Ecosystem
-PyInstaller Specification File
+ASTRO v2.0 - Autonomous Agent Ecosystem
+PyInstaller Specification File for Windows/macOS builds
 """
 
 import sys
@@ -34,7 +34,10 @@ hiddenimports = [
     'dotenv',
     'psutil',
     'numpy',
-    'matplotlib',
+    # New agent dependencies
+    'subprocess',
+    'json',
+    'pathlib',
 ]
 
 # Add customtkinter data files
@@ -55,7 +58,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['matplotlib', 'torch', 'transformers'],  # Exclude heavy deps not needed for GUI
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -84,5 +87,21 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add icon path here if you have one
+    icon=None,  # Add icon path here: 'assets/astro.ico'
+    version='file_version_info.txt',  # Windows version info
+)
+
+# For macOS .app bundle
+app = BUNDLE(
+    exe,
+    name='ASTRO.app',
+    icon=None,  # Add icon path here: 'assets/astro.icns'
+    bundle_identifier='com.astro.agent-ecosystem',
+    info_plist={
+        'CFBundleName': 'ASTRO',
+        'CFBundleDisplayName': 'ASTRO - Autonomous Agent Ecosystem',
+        'CFBundleVersion': '2.0.0',
+        'CFBundleShortVersionString': '2.0.0',
+        'NSHighResolutionCapable': True,
+    },
 )

@@ -165,7 +165,11 @@ class AgentCard(ctk.CTkFrame):
         friendly_names = {
             "research_agent_001": ("🔍", "Research", "Searches the web"),
             "code_agent_001": ("⚡", "Code", "Writes & runs code"), 
-            "filesystem_agent_001": ("📄", "Files", "Manages files")
+            "filesystem_agent_001": ("📄", "Files", "Manages files"),
+            "git_agent_001": ("🔧", "Git", "Version control"),
+            "test_agent_001": ("🧪", "Test", "Runs test suites"),
+            "analysis_agent_001": ("📊", "Analysis", "Code linting"),
+            "knowledge_agent_001": ("🧠", "Knowledge", "Semantic memory"),
         }
         icon, name, desc = friendly_names.get(agent_id, ("●", agent_id, ""))
         
