@@ -446,6 +446,25 @@ def register_routes(app: FastAPI):
     init_system_router(app_state, manager)
     app.include_router(system_router)
     
+    # Health check routes
+    from api.health import router as health_router, init_health_checker
+    app.include_router(health_router)
+    
+    # Initialize health checker with engine and db when available
+    if app_state.engine:
+        init_health_checker(app_state.engine, app_state.db)
+    
+    # Metrics endpoint
+    from fastapi.responses import PlainTextResponse
+    from monitoring.metrics import get_metrics, get_metrics_collector
+    
+    @app.get("/metrics", response_class=PlainTextResponse, tags=["monitoring"])
+    async def metrics():
+        """Prometheus metrics endpoint."""
+        collector = get_metrics_collector()
+        collector.update_uptime()
+        return get_metrics().decode('utf-8')
+    
     # ========================================================================
     # STATIC FILE ROUTES
     # ========================================================================
