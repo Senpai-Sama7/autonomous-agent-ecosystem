@@ -69,17 +69,22 @@ class CodeAgent(BaseAgent):
         self.llm_client = llm_client
         self.model_name = config.get('model_name', 'gpt-3.5-turbo')
         
-        # Security Configuration - safe_mode is ALWAYS True by default
-        self.safe_mode = config.get('safe_mode', True)
-        self.use_docker_sandbox = config.get('use_docker_sandbox', True)
-        self.allow_local_execution = config.get('allow_local_execution', False)
+        # Security Configuration - HARDENED for production
+        # safe_mode is ALWAYS True - cannot be disabled via config
+        self.safe_mode = True  # HARDCODED - ignore config
+        self.use_docker_sandbox = True  # HARDCODED - always require Docker
+        self.allow_local_execution = False  # HARDCODED - never allow local execution
         self.docker_image = config.get('docker_image', 'python:3.11-slim')
         self.docker_timeout = config.get('docker_execution_timeout', 30)
         
-        # SECURITY: Runtime validation of execution environment
-        self._validate_execution_environment()
+        # SECURITY: Fail fast if Docker is not available
+        if not HAS_DOCKER:
+            raise RuntimeError(
+                "SECURITY ERROR: Docker is required for code execution but is not installed. "
+                "Install Docker or disable the CodeAgent."
+            )
         
-        logger.info(f"CodeAgent {agent_id} initialized (Docker: {HAS_DOCKER}, Sandbox: {self.use_docker_sandbox})")
+        logger.info(f"CodeAgent {agent_id} initialized (Docker: {HAS_DOCKER}, Sandbox: ENFORCED)")
     
     def _validate_execution_environment(self) -> None:
         """

@@ -76,7 +76,9 @@ class Workflow:
 
 class AgentEngine:
     """
-    Core engine that manages the autonomous agent ecosystem
+    Core engine that manages the autonomous agent ecosystem.
+    
+    Thread-safe implementation with proper synchronization for concurrent access.
     """
     
     def __init__(self, max_metrics_per_agent: int = 1000):
@@ -97,6 +99,11 @@ class AgentEngine:
         # Shutdown control
         self._shutdown_requested = False
         self._last_status_log = 0.0
+        
+        # Synchronization locks for thread-safe operations
+        self._task_lock = asyncio.Lock()
+        self._agent_lock = asyncio.Lock()
+        self._metrics_lock = asyncio.Lock()
         
         # GIL Optimization: Process Pool for CPU-bound tasks
         self.process_pool: Optional[ProcessPoolExecutor] = None
@@ -197,7 +204,7 @@ class AgentEngine:
                 priority_score, task = await self.task_queue.get()
                 
                 # Check dependencies
-                if not self._are_dependencies_met(task):
+                if not await self._are_dependencies_met(task):
                     # Requeue if dependencies not met
                     await self.task_queue.put((priority_score + 0.5, task))
                     await asyncio.sleep(1.0)
@@ -220,20 +227,18 @@ class AgentEngine:
                 logger.error(f"Error in engine loop: {str(e)}")
                 await asyncio.sleep(1.0)  # Recover from errors
 
-    def _are_dependencies_met(self, task: Task) -> bool:
-        """Check if all task dependencies are completed"""
+    async def _are_dependencies_met(self, task: Task) -> bool:
+        """Check if all task dependencies are completed (thread-safe)"""
         if not task.dependencies:
             return True
-            
-        # Check if all dependencies are in completed_tasks
-        for dep_id in task.dependencies:
-            if dep_id not in self.completed_tasks:
-                # Check if dependency failed
-                if dep_id in self.failed_tasks:
-                    logger.warning(f"Task {task.task_id} has failed dependency {dep_id}")
+        
+        async with self._task_lock:
+            for dep_id in task.dependencies:
+                if dep_id not in self.completed_tasks:
+                    if dep_id in self.failed_tasks:
+                        logger.warning(f"Task {task.task_id} has failed dependency {dep_id}")
+                        return False
                     return False
-                # Dependency not yet completed
-                return False
         return True
     
     def _is_transient_error(self, error_message: str) -> bool:
@@ -327,7 +332,8 @@ class AgentEngine:
             # Process result
             if result.success:
                 logger.info(f"Task {task.task_id} completed successfully by agent {agent_id}")
-                self.completed_tasks.add(task.task_id)
+                async with self._task_lock:
+                    self.completed_tasks.add(task.task_id)
                 workflow_id = task.workflow_id or "standalone"
                 await self.db.save_task_async(task.task_id, workflow_id, task.description, "completed", assigned_agent=agent_id, result=result.result_data)
                 
@@ -354,7 +360,8 @@ class AgentEngine:
                     await self.task_queue.put((priority_score, task))
                 else:
                     # Max retries exceeded or permanent failure
-                    self.failed_tasks.add(task.task_id)
+                    async with self._task_lock:
+                        self.failed_tasks.add(task.task_id)
                     workflow_id = task.workflow_id or "standalone"
                     await self.db.save_task_async(task.task_id, workflow_id, task.description, "failed", assigned_agent=agent_id, result={'error': result.error_message})
                     await self._handle_task_failure(task, agent_id)

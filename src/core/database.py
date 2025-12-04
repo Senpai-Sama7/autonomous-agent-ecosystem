@@ -3,7 +3,7 @@ Database Persistence Layer
 
 REFACTORED: Native async database operations using aiosqlite.
 - True async I/O without blocking the event loop
-- Connection pooling via async context managers
+- Connection pooling for improved performance
 - Sync API marked DEPRECATED - use async methods in production
 
 SECURITY: Sync methods are deprecated for production use due to potential
@@ -14,6 +14,7 @@ import sqlite3
 import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
 import logging
 
 import warnings
@@ -38,12 +39,60 @@ def _deprecation_warning(method_name: str):
 
 logger = logging.getLogger("DatabaseManager")
 
+
+class ConnectionPool:
+    """Simple async connection pool for SQLite."""
+    
+    def __init__(self, db_path: str, max_connections: int = 5, timeout: float = 30.0):
+        self.db_path = db_path
+        self.max_connections = max_connections
+        self.timeout = timeout
+        self._pool: asyncio.Queue = asyncio.Queue(maxsize=max_connections)
+        self._initialized = False
+        self._lock = asyncio.Lock()
+    
+    async def initialize(self):
+        """Initialize the connection pool."""
+        if self._initialized:
+            return
+        async with self._lock:
+            if self._initialized:
+                return
+            for _ in range(self.max_connections):
+                conn = await aiosqlite.connect(self.db_path, timeout=self.timeout)
+                await conn.execute('PRAGMA journal_mode=WAL')
+                await conn.execute(f'PRAGMA busy_timeout={int(self.timeout * 1000)}')
+                await self._pool.put(conn)
+            self._initialized = True
+            logger.debug(f"Connection pool initialized with {self.max_connections} connections")
+    
+    @asynccontextmanager
+    async def acquire(self):
+        """Acquire a connection from the pool."""
+        if not self._initialized:
+            await self.initialize()
+        conn = await asyncio.wait_for(self._pool.get(), timeout=self.timeout)
+        try:
+            yield conn
+        finally:
+            await self._pool.put(conn)
+    
+    async def close(self):
+        """Close all connections in the pool."""
+        while not self._pool.empty():
+            conn = await self._pool.get()
+            await conn.close()
+        self._initialized = False
+
+
 class DatabaseManager:
-    def __init__(self, db_path: str = "ecosystem.db", connection_timeout: float = 30.0):
+    def __init__(self, db_path: str = "ecosystem.db", connection_timeout: float = 30.0, pool_size: int = 5):
         self.db_path = db_path
         self.connection_timeout = connection_timeout
         self._async_initialized = False
         self._closed = False
+        self._pool: Optional[ConnectionPool] = None
+        self._pool_size = pool_size
         self._init_db()
 
     def _init_db(self):
@@ -152,8 +201,8 @@ class DatabaseManager:
         Ensure async schema is initialized (idempotent).
         
         MUST be called before any async operation. This method:
+        - Initializes connection pool
         - Enables WAL mode for better concurrency
-        - Sets connection timeout
         - Is idempotent (safe to call multiple times)
         """
         if self._async_initialized:
@@ -164,24 +213,22 @@ class DatabaseManager:
         
         if HAS_AIOSQLITE:
             try:
-                async with aiosqlite.connect(
-                    self.db_path, 
-                    timeout=self.connection_timeout
-                ) as db:
-                    # Enable WAL mode for better concurrency
-                    await db.execute('PRAGMA journal_mode=WAL')
-                    # Set busy timeout to avoid SQLITE_BUSY errors
-                    await db.execute(f'PRAGMA busy_timeout={int(self.connection_timeout * 1000)}')
-                    await db.commit()
+                self._pool = ConnectionPool(self.db_path, self._pool_size, self.connection_timeout)
+                await self._pool.initialize()
                 self._async_initialized = True
-                logger.debug("Async database initialized with WAL mode")
+                logger.debug("Async database initialized with connection pool")
             except Exception as e:
                 logger.error(f"Failed to initialize async database: {e}")
                 raise
         else:
-            # Fallback: mark as initialized but log warning
             logger.warning("aiosqlite not available - async operations will use thread pool")
             self._async_initialized = True
+    
+    async def close_async(self):
+        """Close the database manager and connection pool."""
+        if self._pool:
+            await self._pool.close()
+        self._closed = True
     
     # ========== SYNC HELPERS ==========
     
@@ -241,31 +288,30 @@ class DatabaseManager:
     # ========== ASYNC API (Native aiosqlite) ==========
     
     async def save_agent_async(self, agent_id: str, config: Dict, state: str, reliability: float):
-        """Async save agent using native aiosqlite"""
+        """Async save agent using connection pool"""
         await self._ensure_async_init()
         sql = '''INSERT OR REPLACE INTO agents 
                  (agent_id, config, state, reliability_score, last_updated)
                  VALUES (?, ?, ?, ?, ?)'''
         params = (agent_id, json.dumps(config), state, reliability, datetime.now().isoformat())
         
-        if HAS_AIOSQLITE:
-            async with aiosqlite.connect(self.db_path) as db:
+        if HAS_AIOSQLITE and self._pool:
+            async with self._pool.acquire() as db:
                 await db.execute(sql, params)
                 await db.commit()
         else:
-            # Fallback to thread executor
             await asyncio.to_thread(self.save_agent, agent_id, config, state, reliability)
     
     async def save_workflow_async(self, workflow_id: str, name: str, status: str, priority: str):
-        """Async save workflow using native aiosqlite"""
+        """Async save workflow using connection pool"""
         await self._ensure_async_init()
         sql = '''INSERT OR REPLACE INTO workflows 
                  (workflow_id, name, status, priority, created_at)
                  VALUES (?, ?, ?, ?, ?)'''
         params = (workflow_id, name, status, priority, datetime.now().isoformat())
         
-        if HAS_AIOSQLITE:
-            async with aiosqlite.connect(self.db_path) as db:
+        if HAS_AIOSQLITE and self._pool:
+            async with self._pool.acquire() as db:
                 await db.execute(sql, params)
                 await db.commit()
         else:
@@ -273,7 +319,7 @@ class DatabaseManager:
     
     async def save_task_async(self, task_id: str, workflow_id: str, description: str, status: str, 
                                assigned_agent: Optional[str] = None, result: Optional[Dict] = None):
-        """Async save task using native aiosqlite"""
+        """Async save task using connection pool"""
         await self._ensure_async_init()
         sql = '''INSERT OR REPLACE INTO tasks 
                  (task_id, workflow_id, description, status, assigned_agent, result, created_at, completed_at)
@@ -282,8 +328,8 @@ class DatabaseManager:
                   json.dumps(result) if result else None, datetime.now().isoformat(), 
                   datetime.now().isoformat() if status == 'completed' else None)
         
-        if HAS_AIOSQLITE:
-            async with aiosqlite.connect(self.db_path) as db:
+        if HAS_AIOSQLITE and self._pool:
+            async with self._pool.acquire() as db:
                 await db.execute(sql, params)
                 await db.commit()
         else:

@@ -14,6 +14,16 @@ REFACTORED: Real telemetry integration.
 
 import asyncio
 import json
+import logging
+import time
+import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, Any, List, Optional, Callable
+
+try:
+    import psutil
+    HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
     logging.warning("psutil not installed. System metrics will be estimated.")

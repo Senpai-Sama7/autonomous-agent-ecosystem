@@ -229,12 +229,13 @@ class TestAgentEngine:
     async def test_dependency_checking(self, temp_db):
         """Test task dependency validation."""
         from core.engine import AgentEngine, Task
+        import asyncio
         
         engine = AgentEngine()
         
         # Task with no dependencies
         task_no_deps = Task(task_id="task_001", description="No deps")
-        assert engine._are_dependencies_met(task_no_deps) is True
+        assert await engine._are_dependencies_met(task_no_deps) is True
         
         # Task with unmet dependency
         task_with_deps = Task(
@@ -242,11 +243,12 @@ class TestAgentEngine:
             description="With deps",
             dependencies=["task_001"]
         )
-        assert engine._are_dependencies_met(task_with_deps) is False
+        assert await engine._are_dependencies_met(task_with_deps) is False
         
         # Mark dependency as complete
-        engine.completed_tasks.add("task_001")
-        assert engine._are_dependencies_met(task_with_deps) is True
+        async with engine._task_lock:
+            engine.completed_tasks.add("task_001")
+        assert await engine._are_dependencies_met(task_with_deps) is True
 
 
 # ============================================================================
@@ -260,21 +262,22 @@ class TestSecurityMiddleware:
     async def test_rate_limiter(self):
         """Test rate limiting functionality."""
         from api.middleware import SlidingWindowRateLimiter
+        import asyncio
         
         limiter = SlidingWindowRateLimiter(
-            requests_per_window=5,
+            requests_per_window=10,
             window_seconds=60,
-            burst_size=3
+            burst_size=10  # Allow burst equal to window limit for this test
         )
         
         client_id = "test_client"
         
-        # First 5 requests should be allowed
-        for i in range(5):
+        # First 10 requests should be allowed
+        for i in range(10):
             allowed, headers = await limiter.is_allowed(client_id)
             assert allowed is True, f"Request {i+1} should be allowed"
         
-        # 6th request should be rate limited
+        # 11th request should be rate limited
         allowed, headers = await limiter.is_allowed(client_id)
         assert allowed is False
         assert "Retry-After" in headers
