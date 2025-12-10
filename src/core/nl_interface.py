@@ -3,6 +3,9 @@ Natural Language Interface for Autonomous Agent Ecosystem
 
 SECURITY: This module includes prompt injection defenses.
 All user input is sanitized before LLM processing.
+
+ENHANCED: Integrates Zero Reasoning for structured reasoning
+on complex requests, improving intent extraction accuracy.
 """
 import logging
 import json
@@ -24,6 +27,14 @@ try:
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
+
+# Zero Reasoning integration for structured intent extraction
+try:
+    from core.zero_reasoning import create_reasoner, AbsoluteZeroReasoner, ReasoningMode
+    HAS_ZERO_REASONING = True
+except ImportError:
+    AbsoluteZeroReasoner = None
+    HAS_ZERO_REASONING = False
 
 logger = logging.getLogger("NaturalLanguageInterface")
 
@@ -115,27 +126,40 @@ class NaturalLanguageInterface:
     """
     Translates natural language user requests into structured workflows and tasks.
     Uses an LLM to parse intent and extract parameters.
+
+    Enhanced with Zero Reasoning for complex multi-step request analysis.
     """
-    
-    def __init__(self, engine: AgentEngine, llm_client: Any = None, model_name: str = "gpt-3.5-turbo"):
+
+    def __init__(self, engine: AgentEngine, llm_client: Any = None, model_name: str = "gpt-3.5-turbo",
+                 enable_reasoning: bool = True):
         self.engine = engine
         self.llm_client = llm_client
         self.model_name = model_name
-        
+        self.enable_reasoning = enable_reasoning
+
         # Initialize ML-based injection defense
         self.injection_classifier = None
         if HAS_TRANSFORMERS:
             try:
                 logger.info("Loading prompt injection classifier (protectai/deberta-v3-base-prompt-injection)...")
                 self.injection_classifier = pipeline(
-                    "text-classification", 
+                    "text-classification",
                     model="protectai/deberta-v3-base-prompt-injection"
                 )
                 logger.info("Prompt injection classifier loaded successfully")
             except Exception as e:
                 logger.warning(f"Failed to load injection classifier: {e}")
         else:
-            logger.warning("Transformers library not found. ML-based prompt injection defense disabled.")        
+            logger.warning("Transformers library not found. ML-based prompt injection defense disabled.")
+
+        # Initialize Zero Reasoner for complex request analysis
+        self.reasoner: Optional[AbsoluteZeroReasoner] = None
+        if enable_reasoning and HAS_ZERO_REASONING and llm_client:
+            try:
+                self.reasoner = create_reasoner(llm_client, model_name)
+                logger.info("Zero Reasoning engine initialized for NL processing")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Zero Reasoner: {e}")        
     def _sanitize_input(self, input_str: str) -> str:
         """
         Sanitize user input to prevent prompt injection attacks.
@@ -196,12 +220,56 @@ class NaturalLanguageInterface:
         
         return normalized
     
+    def _is_complex_request(self, user_input: str) -> bool:
+        """Determine if the request requires structured reasoning analysis."""
+        complex_indicators = [
+            "compare", "analyze", "multiple", "alternatives", "best approach",
+            "trade-offs", "pros and cons", "evaluate", "decide between",
+            "which is better", "should i use", "recommend", "optimize"
+        ]
+        input_lower = user_input.lower()
+        # Complex if input is long or contains complexity indicators
+        return (
+            len(user_input) > 200 or
+            any(indicator in input_lower for indicator in complex_indicators)
+        )
+
+    async def _analyze_with_reasoning(self, user_input: str) -> Dict[str, Any]:
+        """
+        Use Zero Reasoning for structured analysis of complex requests.
+        Returns enhanced context for workflow generation.
+        """
+        if not self.reasoner:
+            return {"enhanced": False}
+
+        try:
+            logger.info("Using Zero Reasoning for complex request analysis...")
+
+            # Perform chain-of-thought reasoning
+            result = await self.reasoner.reason(
+                question=f"What tasks and capabilities are needed to fulfill this user request? Request: {user_input}",
+                context="Available agents: Research (web_search, content_extraction), Code (code_generation, debugging), FileSystem (file_operations)",
+                mode=ReasoningMode.DEDUCTIVE
+            )
+
+            return {
+                "enhanced": True,
+                "reasoning_answer": result.get("answer", ""),
+                "confidence": result.get("confidence", 0.0),
+                "reasoning_steps": result.get("steps", []),
+                "reasoning_type": result.get("reasoning_type", "chain_of_thought")
+            }
+        except Exception as e:
+            logger.warning(f"Zero Reasoning analysis failed: {e}")
+            return {"enhanced": False, "error": str(e)}
+
     async def process_request(self, user_input: str) -> str:
         """
         Process a natural language request and submit a workflow.
         Returns the workflow ID.
-        
+
         SECURITY: Input is sanitized before any LLM interaction.
+        ENHANCED: Uses Zero Reasoning for complex requests.
         """
         # SECURITY: Sanitize input FIRST, before any processing
         try:
@@ -209,49 +277,72 @@ class NaturalLanguageInterface:
         except SecurityException as e:
             logger.warning(f"Security exception during input sanitization: {e}")
             return f"BLOCKED: {e}"
-        
+
         logger.info(f"Processing NL request: {sanitized_input[:100]}...")
-        
+
         if not self.llm_client:
             # Fallback for when no LLM is configured - simple keyword matching
             return await self._process_keyword_request(sanitized_input)
-            
+
         try:
-            # Use LLM to parse request (with sanitized input)
-            workflow_plan = await self._parse_intent_with_llm(sanitized_input)
+            # Check if request is complex and needs reasoning analysis
+            reasoning_context = {}
+            if self.enable_reasoning and self.reasoner and self._is_complex_request(sanitized_input):
+                reasoning_context = await self._analyze_with_reasoning(sanitized_input)
+                if reasoning_context.get("enhanced"):
+                    logger.info(f"Reasoning analysis complete (confidence: {reasoning_context.get('confidence', 0):.2f})")
+
+            # Use LLM to parse request (with sanitized input and optional reasoning context)
+            workflow_plan = await self._parse_intent_with_llm(sanitized_input, reasoning_context)
             return await self._submit_parsed_workflow(workflow_plan)
         except Exception as e:
             logger.error(f"Failed to process NL request: {e}")
             raise
 
-    async def _parse_intent_with_llm(self, user_input: str) -> Dict[str, Any]:
-        """Use LLM to convert text to structured workflow definition"""
-        system_prompt = """
+    async def _parse_intent_with_llm(self, user_input: str, reasoning_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Use LLM to convert text to structured workflow definition.
+
+        Args:
+            user_input: Sanitized user request
+            reasoning_context: Optional context from Zero Reasoning analysis
+        """
+        # Build enhanced context from reasoning if available
+        reasoning_guidance = ""
+        if reasoning_context and reasoning_context.get("enhanced"):
+            reasoning_guidance = f"""
+
+        REASONING ANALYSIS (use this to inform your task breakdown):
+        Analysis: {reasoning_context.get('reasoning_answer', '')}
+        Confidence: {reasoning_context.get('confidence', 0.0):.2f}
+        """
+
+        system_prompt = f"""
         You are an AI Agent Orchestrator. Your job is to convert user requests into a JSON workflow definition.
-        
+
         Available Agents & Capabilities:
         1. Research Agent (capabilities: web_search, content_extraction, knowledge_synthesis)
         2. Code Agent (capabilities: code_generation, code_optimization, debugging)
         3. FileSystem Agent (capabilities: file_operations, data_processing)
-        
+
         Output Format (JSON only):
-        {
+        {{
             "name": "Workflow Name",
             "tasks": [
-                {
+                {{
                     "description": "Task description",
                     "required_capabilities": ["capability1", "capability2"],
-                    "payload": { ... specific params based on agent type ... }
-                }
+                    "payload": {{ ... specific params based on agent type ... }}
+                }}
             ]
-        }
-        
+        }}
+
         Payload Schemas:
-        - Research: {"query": "search term", "research_type": "web_search"|"content_extraction"}
-        - Code: {"code_task_type": "generate_code"|"execute_code", "requirements": "..."}
-        - FileSystem: {"operation": "write_file"|"read_file"|"list_dir", "path": "...", "content": "..."}
+        - Research: {{"query": "search term", "research_type": "web_search"|"content_extraction"}}
+        - Code: {{"code_task_type": "generate_code"|"execute_code", "requirements": "..."}}
+        - FileSystem: {{"operation": "write_file"|"read_file"|"list_dir", "path": "...", "content": "..."}}
+        {reasoning_guidance}
         """
-        
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input}

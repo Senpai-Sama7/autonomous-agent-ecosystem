@@ -8,6 +8,10 @@ Features:
 - Failure recovery with graceful degradation
 - Performance monitoring with emergent behavior detection
 - Cost optimization algorithms balancing speed vs. reliability
+- Self-healing with circuit breakers
+- A2A (Agent-to-Agent) protocol integration
+- MCP (Model Context Protocol) integration
+- Recursive learning from experiences
 """
 
 import asyncio
@@ -23,6 +27,26 @@ from .task_queue import TaskQueue, WorkflowPriority
 # Structured logging and metrics
 from utils.structured_logger import get_logger, LogContext, log_performance
 from monitoring.metrics import get_metrics_collector
+
+# Advanced systems integration
+from .self_healing import get_self_healing_system, SelfHealingSystem, HealthStatus
+from .circuit_breaker import get_circuit_breaker, CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
+from .a2a_protocol import get_a2a_coordinator, A2ACoordinator, AgentCard, A2ATask, A2ATaskState
+from .mcp_integration import MCPRegistry, MCPToolExecutor
+
+# Lazy import for recursive learning (has heavy dependencies)
+RecursiveLearner = None
+
+def _get_recursive_learner():
+    """Lazy import recursive learner to avoid heavy dependency loading at startup."""
+    global RecursiveLearner
+    if RecursiveLearner is None:
+        try:
+            from .recursive_learning import get_recursive_learner
+            RecursiveLearner = get_recursive_learner
+        except ImportError:
+            RecursiveLearner = lambda: None
+    return RecursiveLearner()
 
 logger = get_logger("AgentEngine")
 metrics = get_metrics_collector()
@@ -77,11 +101,18 @@ class Workflow:
 class AgentEngine:
     """
     Core engine that manages the autonomous agent ecosystem.
-    
+
     Thread-safe implementation with proper synchronization for concurrent access.
+
+    Integrated Advanced Systems:
+    - Self-Healing: Automatic fault detection and recovery
+    - Circuit Breakers: Prevent cascade failures
+    - A2A Protocol: Agent-to-agent communication
+    - MCP: Model Context Protocol for external tools
+    - Recursive Learning: Experience-based pattern matching
     """
-    
-    def __init__(self, max_metrics_per_agent: int = 1000):
+
+    def __init__(self, max_metrics_per_agent: int = 1000, enable_advanced_systems: bool = True):
         self.agents: Dict[str, AgentConfig] = {}
         self.agent_instances: Dict[str, Any] = {}  # Holds actual agent instances
         self.workflows: Dict[str, Workflow] = {}
@@ -92,17 +123,32 @@ class AgentEngine:
         self.incentive_pool: float = 10000.0  # Total incentive budget
         self.emergent_behaviors: List[Dict[str, Any]] = []
         self.db = DatabaseManager()
-        
+
         # Shutdown control
         self._shutdown_requested = False
         self._last_status_log = 0.0
-        
+
         # Synchronization locks for thread-safe operations
         self._agent_lock = asyncio.Lock()
         self._metrics_lock = asyncio.Lock()
-        
+        self._workflow_lock = asyncio.Lock()
+
         # GIL Optimization: Process Pool for CPU-bound tasks (lazy init)
         self._process_pool: Optional[ProcessPoolExecutor] = None
+
+        # Advanced Systems Integration
+        self._enable_advanced_systems = enable_advanced_systems
+        self._self_healing: Optional[SelfHealingSystem] = None
+        self._a2a_coordinator: Optional[A2ACoordinator] = None
+        self._mcp_registry: Optional[MCPRegistry] = None
+        self._mcp_executor: Optional[MCPToolExecutor] = None
+        self._learner = None  # RecursiveLearner (lazy loaded)
+        self._circuit_breakers: Dict[str, CircuitBreaker] = {}
+        self._advanced_systems_started = False
+
+        logger.info("AgentEngine initialized", extra={
+            'advanced_systems_enabled': enable_advanced_systems
+        })
         
     @property
     def process_pool(self) -> ProcessPoolExecutor:
@@ -171,25 +217,128 @@ class AgentEngine:
         await self._task_queue.enqueue(task, priority_score)
         logger.debug(f"Queued task {task.task_id} with priority score {priority_score}")
         
+    async def _initialize_advanced_systems(self):
+        """Initialize all advanced systems (self-healing, A2A, MCP, learning)."""
+        if not self._enable_advanced_systems or self._advanced_systems_started:
+            return
+
+        logger.info("Initializing advanced systems...")
+
+        try:
+            # Initialize Self-Healing System
+            self._self_healing = get_self_healing_system()
+
+            # Register agent health checks with self-healing
+            for agent_id, instance in self.agent_instances.items():
+                if hasattr(instance, 'health_check'):
+                    self._self_healing.register_component(
+                        component_id=agent_id,
+                        health_check=instance.health_check,
+                        recovery_callback=instance.recover if hasattr(instance, 'recover') else None
+                    )
+                # Create circuit breaker for each agent
+                self._circuit_breakers[agent_id] = get_circuit_breaker(
+                    f"agent_{agent_id}",
+                    CircuitBreakerConfig(failure_threshold=3, timeout_seconds=30.0)
+                )
+
+            # Initialize A2A Coordinator
+            self._a2a_coordinator = get_a2a_coordinator()
+            await self._a2a_coordinator.start()
+
+            # Initialize MCP Registry
+            self._mcp_registry = MCPRegistry()
+            self._mcp_executor = MCPToolExecutor(self._mcp_registry)
+
+            # Initialize Recursive Learner (lazy)
+            self._learner = _get_recursive_learner()
+
+            self._advanced_systems_started = True
+            logger.info("Advanced systems initialized successfully", extra={
+                'self_healing': self._self_healing is not None,
+                'a2a_coordinator': self._a2a_coordinator is not None,
+                'mcp_registry': self._mcp_registry is not None,
+                'learner': self._learner is not None,
+                'circuit_breakers': len(self._circuit_breakers)
+            })
+
+        except Exception as e:
+            logger.error(f"Failed to initialize advanced systems: {e}", exc_info=True)
+            # Continue without advanced systems - graceful degradation
+            self._enable_advanced_systems = False
+
+    async def _shutdown_advanced_systems(self):
+        """Shutdown all advanced systems gracefully."""
+        if not self._advanced_systems_started:
+            return
+
+        logger.info("Shutting down advanced systems...")
+
+        try:
+            # Stop Self-Healing
+            if self._self_healing:
+                await self._self_healing.stop()
+
+            # Stop A2A Coordinator
+            if self._a2a_coordinator:
+                await self._a2a_coordinator.stop()
+
+            self._advanced_systems_started = False
+            logger.info("Advanced systems shutdown complete")
+
+        except Exception as e:
+            logger.error(f"Error during advanced systems shutdown: {e}")
+
     async def start_engine(self):
         """Start the agent engine main loop"""
         logger.info("Starting Autonomous Agent Ecosystem Engine")
         self._shutdown_requested = False
-        
+
+        # Initialize advanced systems
+        await self._initialize_advanced_systems()
+
+        # Start self-healing monitoring if enabled
+        if self._self_healing and self._advanced_systems_started:
+            await self._self_healing.start()
+
         engine_task = asyncio.create_task(self._engine_loop())
         monitor_task = asyncio.create_task(self._monitoring_loop())
-        
+
+        # Add learning loop if learner is available
+        tasks = [engine_task, monitor_task]
+        if self._learner and self._advanced_systems_started:
+            learning_task = asyncio.create_task(self._learning_loop())
+            tasks.append(learning_task)
+
         try:
-            await asyncio.gather(engine_task, monitor_task)
+            await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             logger.info("Engine tasks cancelled")
         finally:
             logger.info("Engine shutdown complete")
-    
+
+    async def _learning_loop(self):
+        """Background loop for periodic batch learning from experiences."""
+        while not self._shutdown_requested:
+            try:
+                if self._learner and hasattr(self._learner, 'learn_batch'):
+                    result = await self._learner.learn_batch(batch_size=32)
+                    if result.get('patterns_added', 0) > 0:
+                        logger.debug(f"Learning iteration completed", extra=result)
+                await asyncio.sleep(60.0)  # Learn every minute
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in learning loop: {e}")
+                await asyncio.sleep(120.0)  # Longer delay after errors
+
     async def shutdown(self):
         """Request graceful shutdown of the engine"""
         logger.info("Shutdown requested for agent engine")
         self._shutdown_requested = True
+
+        # Shutdown advanced systems
+        await self._shutdown_advanced_systems()
         
         if self.process_pool:
             logger.info("Shutting down process pool...")
@@ -276,42 +425,61 @@ class AgentEngine:
         
     @log_performance
     async def _execute_task_with_agent(self, task: Task, agent_id: str):
-        """Execute a task with a specific agent"""
+        """Execute a task with a specific agent, with circuit breaker protection."""
         start_time = time.time()
         success = False
-        
+        result = None
+
+        # Check circuit breaker before executing
+        circuit_breaker = self._circuit_breakers.get(agent_id)
+        if circuit_breaker:
+            try:
+                if circuit_breaker.is_open:
+                    logger.warning(f"Circuit breaker open for {agent_id}, skipping task {task.task_id}")
+                    # Requeue with delay
+                    await asyncio.sleep(2.0)
+                    priority_score = TaskQueue.calculate_priority(task.priority, task.deadline, bool(task.dependencies))
+                    await self._task_queue.requeue(task, priority_score + 0.5)
+                    return
+            except Exception:
+                pass  # Continue without circuit breaker
+
         try:
             self.agent_status[agent_id] = AgentStatus.BUSY
             await self._task_queue.mark_active(task.task_id, task)
             workflow_id = task.workflow_id or "standalone"
             await self.db.save_task_async(task.task_id, workflow_id, task.description, "running", assigned_agent=agent_id)
-            
+
             metrics.record_task_start(agent_id)
             logger.info(f"Executing task {task.task_id}", extra={
                 'agent_id': agent_id,
                 'task_type': task.required_capabilities[0] if task.required_capabilities else 'generic',
                 'workflow_id': workflow_id
             })
-            
+
             # REAL EXECUTION
             agent_instance = self.agent_instances.get(agent_id)
             if not agent_instance:
                 raise ValueError(f"Agent instance for {agent_id} not found")
 
-            # Execute using the real agent instance
-            # We need to construct the context
+            # Execute using the real agent instance with circuit breaker protection
             from agents.base_agent import AgentContext
             context = AgentContext(
                 agent_id=agent_id,
                 current_time=time.time(),
-                system_load=0.5, # Placeholder
+                system_load=0.5,  # Placeholder
                 available_resources={},
                 other_agents=list(self.agents.keys()),
                 active_workflows=list(self.workflows.keys()),
                 incentive_pool=self.incentive_pool
             )
-            
-            result = await agent_instance.execute_task(asdict(task), context)
+
+            # Execute with optional circuit breaker wrapper
+            if circuit_breaker:
+                async with circuit_breaker:
+                    result = await agent_instance.execute_task(asdict(task), context)
+            else:
+                result = await agent_instance.execute_task(asdict(task), context)
             
             execution_time = time.time() - start_time
             
@@ -384,6 +552,37 @@ class AgentEngine:
             metrics.record_task_complete(agent_id, execution_time, success)
             self.agent_status[agent_id] = AgentStatus.ACTIVE
             await self._task_queue.remove_active(task.task_id)
+
+            # Record learning experience for pattern matching
+            if self._learner and self._advanced_systems_started:
+                try:
+                    from .recursive_learning import ExperienceType
+                    context = {
+                        'agent_id': agent_id,
+                        'task_type': task.required_capabilities[0] if task.required_capabilities else 'generic',
+                        'priority': str(task.priority),
+                        'has_dependencies': bool(task.dependencies)
+                    }
+                    outcome = {
+                        'execution_time': execution_time,
+                        'success': success,
+                        'result_summary': str(result.result_data)[:100] if result and result.success else None
+                    }
+                    # Reward: 1.0 for fast success, 0.5 for slow success, -0.5 for failure
+                    if success:
+                        reward = 1.0 if execution_time < 5.0 else 0.5
+                    else:
+                        reward = -0.5
+
+                    self._learner.record_experience(
+                        experience_type=ExperienceType.TASK_COMPLETION,
+                        context=context,
+                        action=f"execute_{task.required_capabilities[0] if task.required_capabilities else 'generic'}",
+                        outcome=outcome,
+                        reward=reward
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed to record learning experience: {e}")
             
     async def _apply_incentives(self, agent_id: str, execution_time: float, priority: WorkflowPriority):
         """Apply incentive rewards based on performance"""
@@ -424,8 +623,9 @@ class AgentEngine:
         
         if recovery_success:
             logger.info(f"Agent {agent_id} recovered successfully")
-            # Requeue the failed task
-            await self.task_queue.put((self._calculate_task_priority(task, WorkflowPriority.HIGH), task))
+            # Requeue the failed task with high priority
+            priority_score = TaskQueue.calculate_priority(WorkflowPriority.HIGH, task.deadline, bool(task.dependencies))
+            await self._task_queue.enqueue(task, priority_score)
         else:
             logger.error(f"Agent {agent_id} recovery failed. Task {task.task_id} needs manual intervention")
             # Implement fallback strategies

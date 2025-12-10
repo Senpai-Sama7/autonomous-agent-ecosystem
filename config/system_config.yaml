@@ -9,3 +9,48 @@ llm:
   model_name: "gpt-3.5-turbo"
   timeout: 60
   max_retries: 3
+
+# Advanced Systems Integration
+advanced_systems:
+  # Enable all advanced systems (self-healing, A2A, MCP, learning, reasoning)
+  enabled: true
+
+  # Self-Healing System
+  self_healing:
+    enabled: true
+    health_check_interval_seconds: 30
+    max_recovery_attempts: 3
+    recovery_timeout_seconds: 60
+
+  # Circuit Breaker Configuration
+  circuit_breaker:
+    failure_threshold: 5
+    success_threshold: 2
+    timeout_seconds: 30
+    half_open_max_calls: 3
+
+  # A2A (Agent-to-Agent) Protocol
+  a2a_protocol:
+    enabled: true
+    max_concurrent_tasks: 10
+    task_timeout_seconds: 300
+
+  # MCP (Model Context Protocol)
+  mcp:
+    enabled: true
+    max_servers: 5
+    connection_timeout_seconds: 10
+
+  # Recursive Learning
+  learning:
+    enabled: true
+    buffer_size: 10000
+    batch_size: 32
+    learning_interval_seconds: 60
+
+  # Zero Reasoning
+  reasoning:
+    enabled: true
+    max_reasoning_steps: 10
+    branching_factor: 3
+    max_depth: 5

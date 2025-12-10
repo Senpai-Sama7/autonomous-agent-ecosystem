@@ -299,25 +299,28 @@ async def initialize_agents():
     
     # Code Agent
     if CodeAgent is not None:
-        code_config = {
-            "safe_mode": True,
-            "use_docker_sandbox": True,
-            "allowed_languages": ["python"],
-        }
-        code_agent = CodeAgent(
-            agent_id="code_agent_001",
-            config=code_config
-        )
-        await app_state.engine.register_agent(
-            AgentConfig(
+        try:
+            code_config = {
+                "safe_mode": True,
+                "use_docker_sandbox": True,
+                "allowed_languages": ["python"],
+            }
+            code_agent = CodeAgent(
                 agent_id="code_agent_001",
-                capabilities=["code_generation", "code_execution", "code_review"],
-                max_concurrent_tasks=2,
-            ),
-            instance=code_agent
-        )
-        app_state.agents["code_agent_001"] = code_agent
-        logger.info("Code agent initialized")
+                config=code_config
+            )
+            await app_state.engine.register_agent(
+                AgentConfig(
+                    agent_id="code_agent_001",
+                    capabilities=["code_generation", "code_execution", "code_review"],
+                    max_concurrent_tasks=2,
+                ),
+                instance=code_agent
+            )
+            app_state.agents["code_agent_001"] = code_agent
+            logger.info("Code agent initialized")
+        except RuntimeError as e:
+            logger.warning(f"Code agent not available - {e}")
     else:
         logger.warning("Code agent not available - missing dependencies")
     
