@@ -394,7 +394,8 @@ class RecursiveLearner:
         self.chroma_client = None
         self.collection = None
         self.embedding_model = None
-        
+        self._rag_available = False  # Instance-level RAG availability flag
+
         if HAS_RAG:
             try:
                 logger.info("Initializing Semantic Memory (ChromaDB + SentenceTransformers)...")
@@ -402,10 +403,11 @@ class RecursiveLearner:
                 self.collection = self.chroma_client.get_or_create_collection(name="experiences")
                 # Use a lightweight model for speed
                 self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                self._rag_available = True
                 logger.info("Semantic Memory initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize Semantic Memory: {e}")
-                HAS_RAG = False
+                self._rag_available = False
         else:
             logger.warning("ChromaDB or SentenceTransformers not found. Semantic Memory disabled.")    
     def record_experience(self, 
@@ -443,7 +445,7 @@ class RecursiveLearner:
         self._incremental_learn(experience)
         
         # Store in Vector DB for Semantic Retrieval
-        if HAS_RAG and self.collection and self.embedding_model:
+        if self._rag_available and self.collection and self.embedding_model:
             try:
                 # Create embedding for context (stringify context)
                 context_str = json.dumps(context, sort_keys=True)
@@ -598,7 +600,7 @@ class RecursiveLearner:
             return best_action, best_score
             
         # Fallback: Semantic Search (RAG) if no exact pattern match
-        if HAS_RAG and self.collection and self.embedding_model:
+        if self._rag_available and self.collection and self.embedding_model:
             try:
                 context_str = json.dumps(context, sort_keys=True)
                 embedding = self.embedding_model.encode(context_str).tolist()
