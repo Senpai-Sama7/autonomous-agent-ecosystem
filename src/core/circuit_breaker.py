@@ -11,8 +11,8 @@ from enum import Enum
 from typing import Callable, Any, Optional, TypeVar, Generic
 from functools import wraps
 
-from utils.structured_logger import get_logger
-from monitoring.metrics import get_metrics_collector
+from src.utils.structured_logger import get_logger
+from src.monitoring.metrics import get_metrics_collector
 
 logger = get_logger(__name__)
 metrics = get_metrics_collector()

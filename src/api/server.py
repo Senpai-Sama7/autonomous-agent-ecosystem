@@ -471,7 +471,7 @@ def register_routes(app: FastAPI):
     
     # Metrics endpoint
     from fastapi.responses import PlainTextResponse
-    from monitoring.metrics import get_metrics, get_metrics_collector
+    from src.monitoring.metrics import get_metrics, get_metrics_collector
     
     @app.get("/metrics", response_class=PlainTextResponse, tags=["monitoring"])
     async def metrics():

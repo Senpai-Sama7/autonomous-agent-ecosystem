@@ -24,7 +24,7 @@ from .base_agent import BaseAgent, AgentCapability, AgentContext, TaskResult, Ag
 from core.llm_factory import LLMFactory
 
 # Structured logging
-from utils.structured_logger import get_logger, log_performance
+from src.utils.structured_logger import get_logger, log_performance
 
 # Try to import openai with async support
 try:
