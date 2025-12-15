@@ -74,16 +74,12 @@ class CodeAgent(BaseAgent):
         # safe_mode is ALWAYS True - cannot be disabled via config
         self.safe_mode = True  # HARDCODED - ignore config
         self.use_docker_sandbox = True  # HARDCODED - always require Docker
-        self.allow_local_execution = False  # HARDCODED - never allow local execution
+        self.allow_local_execution = bool(config.get("allow_local_execution", False))
         self.docker_image = config.get("docker_image", "python:3.11-slim")
         self.docker_timeout = config.get("docker_execution_timeout", 30)
+        self._docker_available = HAS_DOCKER
 
-        # SECURITY: Fail fast if Docker is not available
-        if not HAS_DOCKER:
-            raise RuntimeError(
-                "SECURITY ERROR: Docker is required for code execution but is not installed. "
-                "Install Docker or disable the CodeAgent."
-            )
+        self._validate_execution_environment()
 
         logger.info(
             f"CodeAgent {agent_id} initialized (Docker: {HAS_DOCKER}, Sandbox: ENFORCED)"
@@ -95,7 +91,7 @@ class CodeAgent(BaseAgent):
 
         This provides early warning if the system is misconfigured.
         """
-        if self.use_docker_sandbox and not HAS_DOCKER:
+        if self.use_docker_sandbox and not self._docker_available:
             logger.warning(
                 "SECURITY WARNING: Docker sandbox is enabled but Docker is not installed. "
                 "Code execution will be DISABLED unless allow_local_execution is True."
@@ -223,7 +219,7 @@ class CodeAgent(BaseAgent):
 
         # Determine execution environment
         if self.use_docker_sandbox:
-            if HAS_DOCKER:
+            if self._docker_available:
                 return await self._execute_in_docker(code)
             elif self.allow_local_execution:
                 logger.warning(

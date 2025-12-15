@@ -10,6 +10,7 @@ import uuid
 from typing import Dict, Any, List
 import argparse
 import os
+from pathlib import Path
 import yaml
 
 import sys
@@ -80,11 +81,10 @@ class AutonomousAgentEcosystem:
         )
 
         # --- Research Agent ---
-        # research_config_dict = agent_configs.get("research_agent_001", {})
-        # research_agent = ResearchAgent(
-        #     agent_id="research_agent_001", config=research_config_dict
-        # )
         research_agent = None  # Temporarily disabled
+        research_config_dict = agent_configs.get("research_agent_001", {})
+        if research_config_dict:
+            logger.info("Research agent configuration found but agent disabled by default.")
 
         # --- Code Agent ---
         code_config_dict = agent_configs.get("code_agent_001", {})
@@ -110,21 +110,29 @@ class AutonomousAgentEcosystem:
 
         # Register agents with the engine
         # (Note: In a real "Super Intelligent" system, we might load these AgentConfig objects from YAML too)
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="research_agent_001",
-                capabilities=[
-                    "web_search",
-                    "content_extraction",
-                    "knowledge_synthesis",
-                    "data_processing",
-                ],
-                max_concurrent_tasks=2,
-                reliability_score=0.92,
-                cost_per_operation=1.5,
-            ),
-            instance=research_agent if research_agent else None,
-        )
+        if research_agent:
+            await self.engine.register_agent(
+                AgentConfig(
+                    agent_id="research_agent_001",
+                    capabilities=[
+                        "web_search",
+                        "content_extraction",
+                        "knowledge_synthesis",
+                        "data_processing",
+                    ],
+                    max_concurrent_tasks=2,
+                    reliability_score=0.92,
+                    cost_per_operation=1.5,
+                ),
+                instance=research_agent,
+            )
+            self.agents["research_agent_001"] = research_agent
+            self.dashboard.register_agent(
+                "research_agent_001",
+                {"state": "active", "capabilities": ["web_search"]},
+            )
+        else:
+            logger.warning("Research agent disabled; skipping registration.")
 
         await self.engine.register_agent(
             AgentConfig(
@@ -154,14 +162,10 @@ class AutonomousAgentEcosystem:
         )
 
         # Store agent references
-        self.agents["research_agent_001"] = research_agent
         self.agents["code_agent_001"] = code_agent
         self.agents["filesystem_agent_001"] = fs_agent
 
         # Register with dashboard
-        self.dashboard.register_agent(
-            "research_agent_001", {"state": "active", "capabilities": ["web_search"]}
-        )
         self.dashboard.register_agent(
             "code_agent_001", {"state": "active", "capabilities": ["code_generation"]}
         )
@@ -179,7 +183,8 @@ class AutonomousAgentEcosystem:
         # Load test workflows
         import yaml
 
-        with open("/home/donovan/Projects/AI/Astro/config/simple_test.yaml", "r") as f:
+        config_path = Path(__file__).resolve().parents[1] / "config" / "simple_test.yaml"
+        with open(config_path, "r", encoding="utf-8") as f:
             test_workflows = yaml.safe_load(f)
 
         # Create and submit test workflows

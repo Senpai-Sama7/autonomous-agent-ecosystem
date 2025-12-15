@@ -64,12 +64,15 @@ class TaskQueue:
         return task_id in self._failed
 
     def dependencies_met(self, dependencies: list) -> bool:
-        """Check if all dependencies are completed."""
+        """Check if all dependencies are completed and none failed."""
         if not dependencies:
             return True
+
         for dep_id in dependencies:
+            if dep_id in self._failed:
+                return False
             if dep_id not in self._completed:
-                return dep_id in self._failed  # Failed dep = unmet
+                return False
         return True
 
     def has_failed_dependency(self, dependencies: list) -> bool:

@@ -145,6 +145,7 @@ class AgentEngine:
         self._task_queue = TaskQueue()  # Use extracted TaskQueue class
         self.agent_status: Dict[str, AgentStatus] = {}
         self.performance_metrics: Dict[str, List[float]] = {}
+        self._agent_active_counts: Dict[str, int] = {}
         self.max_metrics_per_agent = max_metrics_per_agent  # Prevent unbounded growth
         self.incentive_pool: float = 10000.0  # Total incentive budget
         self.emergent_behaviors: List[Dict[str, Any]] = []
@@ -210,6 +211,7 @@ class AgentEngine:
 
         self.agent_status[config.agent_id] = AgentStatus.IDLE
         self.performance_metrics[config.agent_id] = []
+        self._agent_active_counts[config.agent_id] = 0
 
         # Persist to DB (non-blocking)
         await self.db.save_agent_async(
@@ -464,16 +466,9 @@ class AgentEngine:
                 cap in config.capabilities for cap in task.required_capabilities
             )
 
-            # Check if agent has capacity (count tasks assigned to this agent)
-            active_count = sum(
-                1
-                for task_id, task in self.active_tasks.items()
-                # Check if this task is being handled by this agent
-                # We track this via the agent_status being BUSY
-            )
-            # Simplified: if agent is BUSY, count as 1 active task
-            is_busy = agent_status == AgentStatus.BUSY
-            has_capacity = not is_busy or config.max_concurrent_tasks > 1
+            # Track active assignments per agent
+            active_count = self._agent_active_counts.get(agent_id, 0)
+            has_capacity = active_count < config.max_concurrent_tasks
 
             if has_capabilities and has_capacity:
                 suitable_agents.append((agent_id, config))
@@ -516,6 +511,9 @@ class AgentEngine:
 
         try:
             self.agent_status[agent_id] = AgentStatus.BUSY
+            self._agent_active_counts[agent_id] = (
+                self._agent_active_counts.get(agent_id, 0) + 1
+            )
             await self._task_queue.mark_active(task.task_id, task)
             workflow_id = task.workflow_id or "standalone"
             await self.db.save_task_async(
@@ -667,6 +665,11 @@ class AgentEngine:
             metrics.record_task_complete(agent_id, execution_time, success)
             self.agent_status[agent_id] = AgentStatus.ACTIVE
             await self._task_queue.remove_active(task.task_id)
+            current_count = self._agent_active_counts.get(agent_id, 0)
+            if current_count <= 1:
+                self._agent_active_counts[agent_id] = 0
+            else:
+                self._agent_active_counts[agent_id] = current_count - 1
 
             # Record learning experience for pattern matching
             if self._learner and self._advanced_systems_started:

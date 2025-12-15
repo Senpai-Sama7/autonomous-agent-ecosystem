@@ -1,20 +1,20 @@
 # Simple test workflow without code generation
 test_file_ops:
-  description: "Test file read/write operations"
+  description: "Validate workspace file read/write operations"
   priority: "low"
   budget: 10.0
   tasks:
-    - id: "read"
-      capability: "file_operations"
-      instruction: "Read the /etc/hostname file"
-      payload:
-        operation: "read_file"
-        path: "/etc/hostname"
     - id: "write"
       capability: "file_operations"
-      instruction: "Write current timestamp to /tmp/astro_test.txt"
-      dependencies: ["read"]
+      instruction: "Write a sample report into the workspace"
       payload:
         operation: "write_file"
-        path: "/tmp/astro_test.txt"
-        content: "ASTRO test at {{ timestamp }}"
+        path: "reports/astro_test.txt"
+        content: "ASTRO integration sample"
+    - id: "read"
+      capability: "file_operations"
+      instruction: "Read the sample report we created"
+      dependencies: ["write"]
+      payload:
+        operation: "read_file"
+        path: "reports/astro_test.txt"
