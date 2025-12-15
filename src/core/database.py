@@ -103,6 +103,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.connection_timeout = connection_timeout
         self._async_initialized = False
+        self._sync_initialized = False
         self._closed = False
         self._pool: Optional[ConnectionPool] = None
         self._pool_size = pool_size
@@ -137,6 +138,15 @@ class DatabaseManager:
         self._create_tables_sync(c)
         conn.commit()
         conn.close()
+        self._sync_initialized = True
+
+    def _ensure_sync_init(self) -> None:
+        """Ensure synchronous schema is initialized before direct writes."""
+        if self._sync_initialized:
+            return
+        if self._closed:
+            raise RuntimeError("DatabaseManager has been closed")
+        self._init_db_sync()
 
     async def _create_tables(self, db):
         """Create tables asynchronously"""
@@ -195,7 +205,7 @@ class DatabaseManager:
 
         # Knowledge items table
         await db.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
-                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                         (id TEXT PRIMARY KEY,
                           title TEXT,
                           content TEXT,
                           type TEXT,
@@ -280,7 +290,7 @@ class DatabaseManager:
 
         # Knowledge items table
         c.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     (id TEXT PRIMARY KEY,
                       title TEXT,
                       content TEXT,
                       type TEXT,
@@ -465,6 +475,7 @@ class DatabaseManager:
 
     def _execute_write(self, sql: str, params: tuple):
         """Execute a sync write operation"""
+        self._ensure_sync_init()
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(sql, params)
