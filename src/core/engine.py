@@ -153,6 +153,7 @@ class AgentEngine:
 
         # Shutdown control
         self._shutdown_requested = False
+        self._shutdown_event: Optional[asyncio.Event] = None
         self._last_status_log = 0.0
 
         # Synchronization locks for thread-safe operations
@@ -338,10 +339,11 @@ class AgentEngine:
         except Exception as e:
             logger.error(f"Error during advanced systems shutdown: {e}")
 
-    async def start_engine(self):
-        """Start the agent engine main loop"""
+    async def start_engine(self, cancellation_event: Optional[asyncio.Event] = None):
+        """Start the agent engine main loop."""
         logger.info("Starting Autonomous Agent Ecosystem Engine")
         self._shutdown_requested = False
+        self._shutdown_event = cancellation_event or asyncio.Event()
 
         # Initialize database asynchronously
         if not self._db_initialized:
@@ -355,7 +357,7 @@ class AgentEngine:
         if self._self_healing and self._advanced_systems_started:
             await self._self_healing.start()
 
-        engine_task = asyncio.create_task(self._engine_loop())
+        engine_task = asyncio.create_task(self._engine_loop(self._shutdown_event))
         monitor_task = asyncio.create_task(self._monitoring_loop())
 
         # Add learning loop if learner is available
@@ -365,16 +367,22 @@ class AgentEngine:
             tasks.append(learning_task)
 
         try:
-            await asyncio.gather(*tasks)
+            await self._shutdown_event.wait()
+            self._shutdown_requested = True
+            await asyncio.gather(*tasks, return_exceptions=True)
         except asyncio.CancelledError:
             logger.info("Engine tasks cancelled")
         finally:
+            await self.shutdown()
             logger.info("Engine shutdown complete")
 
     async def _learning_loop(self):
         """Background loop for periodic batch learning from experiences."""
         while not self._shutdown_requested:
             try:
+                if self._shutdown_event and self._shutdown_event.is_set():
+                    self._shutdown_requested = True
+                    break
                 if self._learner and hasattr(self._learner, "learn_batch"):
                     result = await self._learner.learn_batch(batch_size=32)
                     if result.get("patterns_added", 0) > 0:
@@ -387,23 +395,39 @@ class AgentEngine:
                 await asyncio.sleep(120.0)  # Longer delay after errors
 
     async def shutdown(self):
-        """Request graceful shutdown of the engine"""
+        """Request graceful shutdown of the engine."""
         logger.info("Shutdown requested for agent engine")
         self._shutdown_requested = True
+        if self._shutdown_event:
+            self._shutdown_event.set()
 
-        # Shutdown advanced systems
+        await self._drain_inflight_tasks()
         await self._shutdown_advanced_systems()
 
-        if self.process_pool:
+        if self._process_pool:
             logger.info("Shutting down process pool...")
-            self.process_pool.shutdown(wait=False)
+            self._process_pool.shutdown(wait=False)
 
-    async def _engine_loop(self):
-        """Main engine loop that processes tasks and manages agents"""
-        while not self._shutdown_requested:
+    async def _engine_loop(self, shutdown_event: Optional[asyncio.Event] = None):
+        """Main engine loop that processes tasks and manages agents."""
+        shutdown_event = shutdown_event or self._shutdown_event
+
+        while not self._shutdown_requested and not (shutdown_event and shutdown_event.is_set()):
             try:
-                # Get next task from queue
-                priority_score, task = await self._task_queue.dequeue()
+                dequeue_task = asyncio.create_task(self._task_queue.dequeue())
+                if shutdown_event:
+                    done, pending = await asyncio.wait(
+                        {dequeue_task, asyncio.create_task(shutdown_event.wait())},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if dequeue_task not in done:
+                        dequeue_task.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
+                        break
+                    await asyncio.gather(*pending, return_exceptions=True)
+                else:
+                    done = {await dequeue_task}
+                priority_score, task = dequeue_task.result()
 
                 # Check dependencies using TaskQueue
                 if self._task_queue.has_failed_dependency(task.dependencies):
@@ -418,6 +442,10 @@ class AgentEngine:
                 # Find suitable agent for this task
                 suitable_agent = await self._find_suitable_agent(task)
 
+                if shutdown_event and shutdown_event.is_set():
+                    await self._task_queue.requeue(task, priority_score)
+                    break
+
                 if suitable_agent:
                     await self._execute_task_with_agent(task, suitable_agent)
                 else:
@@ -431,6 +459,25 @@ class AgentEngine:
             except Exception as e:
                 logger.error(f"Error in engine loop: {str(e)}")
                 await asyncio.sleep(1.0)  # Recover from errors
+
+        await self._drain_inflight_tasks()
+
+    async def _drain_inflight_tasks(self, timeout: float = 30.0) -> None:
+        """Wait for in-flight tasks to complete before shutdown."""
+        start_time = time.time()
+
+        while self._task_queue.active_count > 0 and (
+            time.time() - start_time
+        ) < timeout:
+            await asyncio.sleep(0.1)
+
+        if self._task_queue.active_count > 0:
+            logger.warning(
+                "Timed out waiting for tasks to reach checkpoint",
+                extra={"active_tasks": list(self._task_queue.active_tasks.keys())},
+            )
+        else:
+            logger.info("All in-flight tasks drained successfully")
 
     def _is_transient_error(self, error_message: str) -> bool:
         """Determine if an error is transient and worth retrying"""
@@ -838,6 +885,9 @@ class AgentEngine:
         """Continuous monitoring loop for system health and emergent behaviors"""
         while not self._shutdown_requested:
             try:
+                if self._shutdown_event and self._shutdown_event.is_set():
+                    self._shutdown_requested = True
+                    break
                 await self._check_system_health()
                 await self._detect_emergent_behaviors()
                 await self._optimize_resource_allocation()

@@ -10,10 +10,10 @@ import uuid
 from typing import Dict, Any, List
 import argparse
 import os
+import signal
 import yaml
 
 import sys
-import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -207,10 +207,19 @@ class AutonomousAgentEcosystem:
                 f"Submitted test workflow: {wf_name} ({wf_config['description']})"
             )
 
-    async def start_system(self):
+    async def start_system(self, shutdown_event: asyncio.Event | None = None):
         """Start the entire autonomous agent ecosystem"""
         logger.info("🚀 Starting Autonomous Agent Ecosystem (PRODUCTION MODE)")
         logger.info("=" * 60)
+
+        shutdown_event = shutdown_event or asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, shutdown_event.set)
+            except NotImplementedError:
+                signal.signal(sig, lambda *_: shutdown_event.set())
 
         try:
             # Initialize agents
@@ -220,27 +229,22 @@ class AutonomousAgentEcosystem:
             await self.create_sample_workflows()
 
             # Start engine and monitoring in parallel
-            engine_task = asyncio.create_task(self.engine.start_engine())
+            engine_task = asyncio.create_task(
+                self.engine.start_engine(shutdown_event)
+            )
             monitoring_task = asyncio.create_task(self.dashboard.start_monitoring())
 
-            # Run for specified duration
-            duration = self.config.get("duration", 120)
             logger.info(
-                f"System running for {duration} seconds... Press Ctrl+C to stop."
+                "System running. Send SIGINT (Ctrl+C) or SIGTERM to trigger shutdown."
             )
             logger.info("=" * 60)
 
-            await asyncio.sleep(duration)
+            await shutdown_event.wait()
+            logger.info("Shutdown signal received, draining tasks...")
 
-            # Cancel tasks gracefully
-            engine_task.cancel()
-            monitoring_task.cancel()
+            self.dashboard.request_shutdown()
 
-            try:
-                await engine_task
-                await monitoring_task
-            except asyncio.CancelledError:
-                pass
+            await asyncio.gather(engine_task, monitoring_task, return_exceptions=True)
 
             logger.info("✅ System shutdown completed gracefully")
 
