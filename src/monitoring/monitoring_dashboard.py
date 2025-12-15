@@ -13,16 +13,15 @@ REFACTORED: Real telemetry integration.
 """
 
 import asyncio
+import base64
 import json
 import logging
-import time
-<<<<<<< HEAD
 import os
-from typing import Dict, Any, List, Optional
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from io import BytesIO
-import base64
+from typing import Any, Dict, List, Optional
 
 # Optional dependencies
 try:
@@ -33,12 +32,6 @@ except ImportError:
     HAS_MATPLOTLIB = False
     plt = None
     np = None
-=======
-import uuid
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, Any, List, Optional, Callable
->>>>>>> d2df9967907e468de5eaf5cbc96aa86f90b8fa44
 
 try:
     import psutil

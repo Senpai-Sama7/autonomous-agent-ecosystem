@@ -5,15 +5,12 @@ Updated by C0Di3 to support Declarative Workflows and Templating.
 
 import asyncio
 import json
-import time
 import uuid
 from typing import Dict, Any, List
 import argparse
 import os
-import yaml
 
 import sys
-import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -173,38 +170,52 @@ class AutonomousAgentEcosystem:
         logger.info("Agents initialized and registered successfully")
 
     async def create_sample_workflows(self):
-        """Create sample workflows from test YAML"""
-        logger.info("Creating sample workflows from test config...")
+        """Create sample workflows from YAML configuration."""
 
-        # Load test workflows
-        import yaml
+        logger.info("Creating sample workflows from config...")
 
-        with open("/home/donovan/Projects/AI/Astro/config/simple_test.yaml", "r") as f:
-            test_workflows = yaml.safe_load(f)
+        workflow_path_override = self.config.get("sample_workflows")
+        test_workflows = self.config_loader.load_workflows(
+            workflow_path=workflow_path_override
+        )
 
-        # Create and submit test workflows
+        if not test_workflows:
+            logger.info("No sample workflows loaded; skipping submission.")
+            return
+
         for wf_name, wf_config in test_workflows.items():
-            workflow = Workflow(
-                workflow_id=f"wf_{wf_name}_{uuid.uuid4().hex[:8]}",
-                name=wf_config["description"],
-                tasks=[
-                    Task(
-                        task_id=f"{task['id']}_{uuid.uuid4().hex[:8]}",
-                        description=task["instruction"],
-                        required_capabilities=[task["capability"]],
-                        payload=task.get("payload", {}),
-                        priority=WorkflowPriority(wf_config["priority"]),
-                    )
-                    for task in wf_config["tasks"]
-                ],
-                priority=WorkflowPriority(wf_config["priority"]),
-                max_execution_time=wf_config.get("max_execution_time", 3600.0),
-                cost_budget=wf_config.get("budget", 100.0),
-            )
+            if not isinstance(wf_config, dict):
+                logger.warning("Skipping workflow '%s' because it is not a mapping", wf_name)
+                continue
+
+            try:
+                workflow = Workflow(
+                    workflow_id=f"wf_{wf_name}_{uuid.uuid4().hex[:8]}",
+                    name=wf_config["description"],
+                    tasks=[
+                        Task(
+                            task_id=f"{task['id']}_{uuid.uuid4().hex[:8]}",
+                            description=task["instruction"],
+                            required_capabilities=[task["capability"]],
+                            payload=task.get("payload", {}),
+                            priority=WorkflowPriority(wf_config["priority"]),
+                        )
+                        for task in wf_config["tasks"]
+                    ],
+                    priority=WorkflowPriority(wf_config["priority"]),
+                    max_execution_time=wf_config.get("max_execution_time", 3600.0),
+                    cost_budget=wf_config.get("budget", 100.0),
+                )
+            except KeyError as exc:
+                logger.error(
+                    "Workflow '%s' missing required field: %s. Skipping.", wf_name, exc
+                )
+                continue
+
             self.workflows[workflow.workflow_id] = workflow
             await self.engine.submit_workflow(workflow)
             logger.info(
-                f"Submitted test workflow: {wf_name} ({wf_config['description']})"
+                "Submitted test workflow: %s (%s)", wf_name, wf_config.get("description", "")
             )
 
     async def start_system(self):
@@ -309,6 +320,11 @@ def parse_arguments():
     parser.add_argument("--model-name", type=str, help="Model name to use")
     parser.add_argument("--api-key", type=str, help="API key for the LLM provider")
     parser.add_argument("--api-base", type=str, help="Base URL for the LLM API")
+    parser.add_argument(
+        "--sample-workflows",
+        type=str,
+        help="Path to sample workflows YAML file (relative to config/ by default)",
+    )
 
     return parser.parse_args()
 
