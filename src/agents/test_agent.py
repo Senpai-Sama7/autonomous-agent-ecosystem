@@ -14,14 +14,18 @@ class TestAgent(BaseAgent):
     def __init__(self, agent_id: str, config: Dict[str, Any]):
         super().__init__(agent_id, [AgentCapability.DATA_PROCESSING], config)
 
-    async def execute_task(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
+    async def execute_task(
+        self, task: Dict[str, Any], context: AgentContext
+    ) -> TaskResult:
         """Run tests."""
         try:
             command = task.get("command")
             target_file = task.get("target_file")
 
             if not command:
-                return TaskResult(success=False, error_message="No test command provided")
+                return TaskResult(
+                    success=False, error_message="No test command provided"
+                )
 
             cmd = command.split() if isinstance(command, str) else command
             if target_file:
@@ -34,8 +38,8 @@ class TestAgent(BaseAgent):
                 result_data={
                     "output": result.stdout,
                     "errors": result.stderr,
-                    "return_code": result.returncode
-                }
+                    "return_code": result.returncode,
+                },
             )
         except subprocess.TimeoutExpired:
             return TaskResult(success=False, error_message="Test execution timed out")

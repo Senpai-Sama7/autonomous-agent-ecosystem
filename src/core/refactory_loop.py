@@ -2,6 +2,7 @@
 Refactory Feedback Loop System
 Enterprise-grade implementation for automated code refactoring based on quality feedback.
 """
+
 import asyncio
 import logging
 import ast
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class RefactorType(Enum):
     """Types of refactoring operations"""
+
     EXTRACT_METHOD = "extract_method"
     INLINE_METHOD = "inline_method"
     RENAME = "rename"
@@ -37,6 +39,7 @@ class RefactorType(Enum):
 
 class QualityDimension(Enum):
     """Code quality dimensions"""
+
     READABILITY = "readability"
     MAINTAINABILITY = "maintainability"
     PERFORMANCE = "performance"
@@ -48,6 +51,7 @@ class QualityDimension(Enum):
 @dataclass
 class CodeMetrics:
     """Code quality metrics"""
+
     lines_of_code: int = 0
     cyclomatic_complexity: int = 0
     cognitive_complexity: int = 0
@@ -70,7 +74,7 @@ class CodeMetrics:
             "typeHintCoverage": self.type_hint_coverage,
             "avgFunctionLength": self.avg_function_length,
             "maxFunctionLength": self.max_function_length,
-            "importCount": self.import_count
+            "importCount": self.import_count,
         }
 
     def quality_score(self) -> float:
@@ -97,6 +101,7 @@ class CodeMetrics:
 @dataclass
 class RefactorSuggestion:
     """A refactoring suggestion"""
+
     suggestion_id: str
     refactor_type: RefactorType
     target: str  # Function/class/variable name
@@ -117,13 +122,14 @@ class RefactorSuggestion:
             "impact": {k.value: v for k, v in self.impact.items()},
             "priority": self.priority,
             "codeBefore": self.code_before,
-            "codeAfter": self.code_after
+            "codeAfter": self.code_after,
         }
 
 
 @dataclass
 class FeedbackItem:
     """Feedback on code quality"""
+
     feedback_id: str
     source: str  # "static_analysis", "runtime", "user", "test"
     dimension: QualityDimension
@@ -152,8 +158,10 @@ class CodeAnalyzer:
         """Analyze code and return metrics"""
         metrics = CodeMetrics()
 
-        lines = code.split('\n')
-        metrics.lines_of_code = len([l for l in lines if l.strip() and not l.strip().startswith('#')])
+        lines = code.split("\n")
+        metrics.lines_of_code = len(
+            [l for l in lines if l.strip() and not l.strip().startswith("#")]
+        )
 
         try:
             tree = ast.parse(code)
@@ -260,7 +268,7 @@ class CodeAnalyzer:
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if hasattr(node, 'end_lineno') and hasattr(node, 'lineno'):
+                if hasattr(node, "end_lineno") and hasattr(node, "lineno"):
                     lengths.append(node.end_lineno - node.lineno + 1)
 
         return lengths
@@ -309,56 +317,84 @@ class RefactorEngine:
         # Check for long functions
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                func_len = getattr(node, 'end_lineno', 0) - getattr(node, 'lineno', 0)
+                func_len = getattr(node, "end_lineno", 0) - getattr(node, "lineno", 0)
                 if func_len > 30:
-                    suggestions.append(RefactorSuggestion(
-                        suggestion_id=hashlib.md5(f"{node.name}_{node.lineno}".encode()).hexdigest()[:8],
-                        refactor_type=RefactorType.EXTRACT_METHOD,
-                        target=node.name,
-                        location=(node.lineno, node.col_offset),
-                        description=f"Function '{node.name}' is {func_len} lines. Consider extracting smaller methods.",
-                        impact={QualityDimension.READABILITY: 0.3, QualityDimension.MAINTAINABILITY: 0.2},
-                        priority=min(func_len / 100, 0.9)
-                    ))
+                    suggestions.append(
+                        RefactorSuggestion(
+                            suggestion_id=hashlib.md5(
+                                f"{node.name}_{node.lineno}".encode()
+                            ).hexdigest()[:8],
+                            refactor_type=RefactorType.EXTRACT_METHOD,
+                            target=node.name,
+                            location=(node.lineno, node.col_offset),
+                            description=f"Function '{node.name}' is {func_len} lines. Consider extracting smaller methods.",
+                            impact={
+                                QualityDimension.READABILITY: 0.3,
+                                QualityDimension.MAINTAINABILITY: 0.2,
+                            },
+                            priority=min(func_len / 100, 0.9),
+                        )
+                    )
 
         # Check for complex conditionals
         for node in ast.walk(tree):
             if isinstance(node, ast.If):
                 condition_complexity = self._count_boolean_ops(node.test)
                 if condition_complexity > 3:
-                    suggestions.append(RefactorSuggestion(
-                        suggestion_id=hashlib.md5(f"if_{node.lineno}".encode()).hexdigest()[:8],
-                        refactor_type=RefactorType.DECOMPOSE_CONDITIONAL,
-                        target="conditional",
-                        location=(node.lineno, node.col_offset),
-                        description=f"Complex conditional with {condition_complexity} boolean operations.",
-                        impact={QualityDimension.READABILITY: 0.2, QualityDimension.COMPLEXITY: 0.15},
-                        priority=min(condition_complexity / 10, 0.8)
-                    ))
+                    suggestions.append(
+                        RefactorSuggestion(
+                            suggestion_id=hashlib.md5(
+                                f"if_{node.lineno}".encode()
+                            ).hexdigest()[:8],
+                            refactor_type=RefactorType.DECOMPOSE_CONDITIONAL,
+                            target="conditional",
+                            location=(node.lineno, node.col_offset),
+                            description=f"Complex conditional with {condition_complexity} boolean operations.",
+                            impact={
+                                QualityDimension.READABILITY: 0.2,
+                                QualityDimension.COMPLEXITY: 0.15,
+                            },
+                            priority=min(condition_complexity / 10, 0.8),
+                        )
+                    )
 
         # Check for missing type hints
         if metrics.type_hint_coverage < 0.7:
-            suggestions.append(RefactorSuggestion(
-                suggestion_id=hashlib.md5(f"types_{datetime.now()}".encode()).hexdigest()[:8],
-                refactor_type=RefactorType.ADD_TYPE_HINTS,
-                target="module",
-                location=(1, 0),
-                description=f"Type hint coverage is {metrics.type_hint_coverage:.0%}. Add type hints to improve code quality.",
-                impact={QualityDimension.MAINTAINABILITY: 0.25, QualityDimension.TESTABILITY: 0.15},
-                priority=0.6
-            ))
+            suggestions.append(
+                RefactorSuggestion(
+                    suggestion_id=hashlib.md5(
+                        f"types_{datetime.now()}".encode()
+                    ).hexdigest()[:8],
+                    refactor_type=RefactorType.ADD_TYPE_HINTS,
+                    target="module",
+                    location=(1, 0),
+                    description=f"Type hint coverage is {metrics.type_hint_coverage:.0%}. Add type hints to improve code quality.",
+                    impact={
+                        QualityDimension.MAINTAINABILITY: 0.25,
+                        QualityDimension.TESTABILITY: 0.15,
+                    },
+                    priority=0.6,
+                )
+            )
 
         # Check for missing documentation
         if metrics.documentation_ratio < 0.5:
-            suggestions.append(RefactorSuggestion(
-                suggestion_id=hashlib.md5(f"docs_{datetime.now()}".encode()).hexdigest()[:8],
-                refactor_type=RefactorType.IMPROVE_NAMING,
-                target="module",
-                location=(1, 0),
-                description=f"Documentation coverage is {metrics.documentation_ratio:.0%}. Add docstrings.",
-                impact={QualityDimension.READABILITY: 0.2, QualityDimension.MAINTAINABILITY: 0.2},
-                priority=0.5
-            ))
+            suggestions.append(
+                RefactorSuggestion(
+                    suggestion_id=hashlib.md5(
+                        f"docs_{datetime.now()}".encode()
+                    ).hexdigest()[:8],
+                    refactor_type=RefactorType.IMPROVE_NAMING,
+                    target="module",
+                    location=(1, 0),
+                    description=f"Documentation coverage is {metrics.documentation_ratio:.0%}. Add docstrings.",
+                    impact={
+                        QualityDimension.READABILITY: 0.2,
+                        QualityDimension.MAINTAINABILITY: 0.2,
+                    },
+                    priority=0.5,
+                )
+            )
 
         # Sort by priority
         suggestions.sort(key=lambda s: s.priority, reverse=True)
@@ -373,13 +409,17 @@ class RefactorEngine:
                 count += len(child.values)
         return count
 
-    async def apply_refactoring(self, code: str, suggestion: RefactorSuggestion) -> Optional[str]:
+    async def apply_refactoring(
+        self, code: str, suggestion: RefactorSuggestion
+    ) -> Optional[str]:
         """Apply a refactoring suggestion"""
         if self.llm_client:
             return await self._llm_refactor(code, suggestion)
         return self._rule_based_refactor(code, suggestion)
 
-    async def _llm_refactor(self, code: str, suggestion: RefactorSuggestion) -> Optional[str]:
+    async def _llm_refactor(
+        self, code: str, suggestion: RefactorSuggestion
+    ) -> Optional[str]:
         """Use LLM for refactoring"""
         try:
             prompt = f"""Refactor the following code according to this suggestion:
@@ -398,12 +438,12 @@ Return ONLY the refactored code, nothing else."""
             response = await self.llm_client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.2
+                temperature=0.2,
             )
 
             content = response.choices[0].message.content
             # Extract code from response
-            code_match = re.search(r'```python\n(.*?)\n```', content, re.DOTALL)
+            code_match = re.search(r"```python\n(.*?)\n```", content, re.DOTALL)
             if code_match:
                 return code_match.group(1)
             return content
@@ -411,7 +451,9 @@ Return ONLY the refactored code, nothing else."""
             logger.error(f"LLM refactoring failed: {e}")
             return None
 
-    def _rule_based_refactor(self, code: str, suggestion: RefactorSuggestion) -> Optional[str]:
+    def _rule_based_refactor(
+        self, code: str, suggestion: RefactorSuggestion
+    ) -> Optional[str]:
         """Apply rule-based refactoring"""
         # Simple rule-based transformations
         if suggestion.refactor_type == RefactorType.OPTIMIZE_IMPORTS:
@@ -422,16 +464,16 @@ Return ONLY the refactored code, nothing else."""
 
     def _optimize_imports(self, code: str) -> str:
         """Optimize imports"""
-        lines = code.split('\n')
+        lines = code.split("\n")
         imports = []
         from_imports = []
         other_lines = []
 
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith('import '):
+            if stripped.startswith("import "):
                 imports.append(stripped)
-            elif stripped.startswith('from '):
+            elif stripped.startswith("from "):
                 from_imports.append(stripped)
             else:
                 other_lines.append(line)
@@ -444,13 +486,13 @@ Return ONLY the refactored code, nothing else."""
         result = []
         if imports:
             result.extend(imports)
-            result.append('')
+            result.append("")
         if from_imports:
             result.extend(from_imports)
-            result.append('')
+            result.append("")
         result.extend(other_lines)
 
-        return '\n'.join(result)
+        return "\n".join(result)
 
 
 class FeedbackCollector:
@@ -503,7 +545,7 @@ class FeedbackCollector:
         return {
             "total": len(self._feedback),
             "by_dimension": by_dimension,
-            "by_severity": by_severity
+            "by_severity": by_severity,
         }
 
 
@@ -517,7 +559,9 @@ class RefactoryFeedbackLoop:
         self._history: List[Dict[str, Any]] = []
 
         # Register default feedback source
-        self.collector.register_source("static_analysis", self._static_analysis_feedback)
+        self.collector.register_source(
+            "static_analysis", self._static_analysis_feedback
+        )
 
     def _static_analysis_feedback(self, code: str) -> List[FeedbackItem]:
         """Generate feedback from static analysis"""
@@ -525,26 +569,36 @@ class RefactoryFeedbackLoop:
         metrics = self.analyzer.analyze(code)
 
         if metrics.cyclomatic_complexity > 20:
-            feedback.append(FeedbackItem(
-                feedback_id=hashlib.md5(f"cc_{datetime.now()}".encode()).hexdigest()[:8],
-                source="static_analysis",
-                dimension=QualityDimension.COMPLEXITY,
-                message=f"High cyclomatic complexity: {metrics.cyclomatic_complexity}",
-                severity=min(metrics.cyclomatic_complexity / 50, 1.0)
-            ))
+            feedback.append(
+                FeedbackItem(
+                    feedback_id=hashlib.md5(
+                        f"cc_{datetime.now()}".encode()
+                    ).hexdigest()[:8],
+                    source="static_analysis",
+                    dimension=QualityDimension.COMPLEXITY,
+                    message=f"High cyclomatic complexity: {metrics.cyclomatic_complexity}",
+                    severity=min(metrics.cyclomatic_complexity / 50, 1.0),
+                )
+            )
 
         if metrics.documentation_ratio < 0.5:
-            feedback.append(FeedbackItem(
-                feedback_id=hashlib.md5(f"doc_{datetime.now()}".encode()).hexdigest()[:8],
-                source="static_analysis",
-                dimension=QualityDimension.READABILITY,
-                message=f"Low documentation: {metrics.documentation_ratio:.0%}",
-                severity=1 - metrics.documentation_ratio
-            ))
+            feedback.append(
+                FeedbackItem(
+                    feedback_id=hashlib.md5(
+                        f"doc_{datetime.now()}".encode()
+                    ).hexdigest()[:8],
+                    source="static_analysis",
+                    dimension=QualityDimension.READABILITY,
+                    message=f"Low documentation: {metrics.documentation_ratio:.0%}",
+                    severity=1 - metrics.documentation_ratio,
+                )
+            )
 
         return feedback
 
-    async def run_iteration(self, code: str, auto_apply: bool = False) -> Dict[str, Any]:
+    async def run_iteration(
+        self, code: str, auto_apply: bool = False
+    ) -> Dict[str, Any]:
         """Run one iteration of the feedback loop"""
         iteration_start = datetime.now()
 
@@ -564,7 +618,9 @@ class RefactoryFeedbackLoop:
 
         if auto_apply and suggestions:
             for suggestion in suggestions[:3]:  # Limit auto-apply
-                refactored = await self.engine.apply_refactoring(current_code, suggestion)
+                refactored = await self.engine.apply_refactoring(
+                    current_code, suggestion
+                )
                 if refactored:
                     current_code = refactored
                     applied.append(suggestion.suggestion_id)
@@ -586,7 +642,7 @@ class RefactoryFeedbackLoop:
             "metrics_before": before_metrics.to_dict(),
             "metrics_after": after_metrics.to_dict(),
             "suggestions": [s.to_dict() for s in suggestions[:5]],
-            "code": current_code if auto_apply else None
+            "code": current_code if auto_apply else None,
         }
 
         self._history.append(result)
@@ -608,15 +664,20 @@ class RefactoryFeedbackLoop:
             "iterations": len(self._history),
             "initial_score": self._history[0]["before_score"],
             "current_score": scores[-1] if scores else 0,
-            "total_improvement": scores[-1] - self._history[0]["before_score"] if scores else 0,
-            "total_suggestions": sum(h.get("suggestion_count", 0) for h in self._history),
+            "total_improvement": (
+                scores[-1] - self._history[0]["before_score"] if scores else 0
+            ),
+            "total_suggestions": sum(
+                h.get("suggestion_count", 0) for h in self._history
+            ),
             "total_applied": sum(h.get("applied_count", 0) for h in self._history),
-            "feedback_summary": self.collector.get_feedback_summary()
+            "feedback_summary": self.collector.get_feedback_summary(),
         }
 
 
 # Singleton instance
 _feedback_loop: Optional[RefactoryFeedbackLoop] = None
+
 
 def get_feedback_loop(llm_client: Any = None) -> RefactoryFeedbackLoop:
     """Get or create the feedback loop singleton"""

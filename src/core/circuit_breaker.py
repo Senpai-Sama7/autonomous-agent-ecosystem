@@ -4,6 +4,7 @@ Circuit Breaker Pattern Implementation
 Prevents cascade failures when external services (LLM, web search) are unavailable.
 Implements the standard circuit breaker states: CLOSED, OPEN, HALF_OPEN.
 """
+
 import asyncio
 import time
 from dataclasses import dataclass, field
@@ -17,31 +18,36 @@ from src.monitoring.metrics import get_metrics_collector
 logger = get_logger(__name__)
 metrics = get_metrics_collector()
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation, requests pass through
-    OPEN = "open"          # Failing, requests are rejected immediately
+
+    CLOSED = "closed"  # Normal operation, requests pass through
+    OPEN = "open"  # Failing, requests are rejected immediately
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker behavior."""
-    failure_threshold: int = 5          # Failures before opening
-    success_threshold: int = 2          # Successes in half-open to close
-    timeout_seconds: float = 30.0       # Time before half-open attempt
-    half_open_max_calls: int = 3        # Max concurrent calls in half-open
+
+    failure_threshold: int = 5  # Failures before opening
+    success_threshold: int = 2  # Successes in half-open to close
+    timeout_seconds: float = 30.0  # Time before half-open attempt
+    half_open_max_calls: int = 3  # Max concurrent calls in half-open
 
 
 class CircuitBreakerError(Exception):
     """Raised when circuit is open and request is rejected."""
+
     def __init__(self, service_name: str, retry_after: float):
         self.service_name = service_name
         self.retry_after = retry_after
-        super().__init__(f"Circuit breaker open for {service_name}. Retry after {retry_after:.1f}s")
+        super().__init__(
+            f"Circuit breaker open for {service_name}. Retry after {retry_after:.1f}s"
+        )
 
 
 @dataclass
@@ -56,6 +62,7 @@ class CircuitBreaker:
             async with breaker:
                 return await llm_client.complete(...)
     """
+
     name: str
     config: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
 
@@ -85,7 +92,9 @@ class CircuitBreaker:
             await self._check_state_transition()
 
             if self._state == CircuitState.OPEN:
-                retry_after = self.config.timeout_seconds - (time.time() - self._last_failure_time)
+                retry_after = self.config.timeout_seconds - (
+                    time.time() - self._last_failure_time
+                )
                 raise CircuitBreakerError(self.name, max(0, retry_after))
 
             if self._state == CircuitState.HALF_OPEN:
@@ -137,13 +146,17 @@ class CircuitBreaker:
         metrics.record_error(f"circuit_breaker_{self.name}")
 
         if self._state == CircuitState.HALF_OPEN:
-            logger.warning(f"Circuit {self.name}: HALF_OPEN -> OPEN (failure during recovery)")
+            logger.warning(
+                f"Circuit {self.name}: HALF_OPEN -> OPEN (failure during recovery)"
+            )
             self._state = CircuitState.OPEN
             self._half_open_calls = 0
 
         elif self._state == CircuitState.CLOSED:
             if self._failure_count >= self.config.failure_threshold:
-                logger.warning(f"Circuit {self.name}: CLOSED -> OPEN (threshold reached)")
+                logger.warning(
+                    f"Circuit {self.name}: CLOSED -> OPEN (threshold reached)"
+                )
                 self._state = CircuitState.OPEN
 
     def get_stats(self) -> dict:
@@ -161,7 +174,9 @@ class CircuitBreaker:
 _breakers: dict[str, CircuitBreaker] = {}
 
 
-def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
+def get_circuit_breaker(
+    name: str, config: Optional[CircuitBreakerConfig] = None
+) -> CircuitBreaker:
     """Get or create a circuit breaker for a service."""
     if name not in _breakers:
         _breakers[name] = CircuitBreaker(name, config or CircuitBreakerConfig())
@@ -177,6 +192,7 @@ def circuit_protected(service_name: str, config: Optional[CircuitBreakerConfig] 
         async def call_llm(prompt: str) -> str:
             return await client.complete(prompt)
     """
+
     def decorator(func: Callable) -> Callable:
         breaker = get_circuit_breaker(service_name, config)
 
@@ -186,4 +202,5 @@ def circuit_protected(service_name: str, config: Optional[CircuitBreakerConfig] 
                 return await func(*args, **kwargs)
 
         return wrapper
+
     return decorator

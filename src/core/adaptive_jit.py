@@ -14,6 +14,7 @@ This is a high-quality Smart Memoization system that reduces redundant computati
 without developer intervention. It does NOT perform bytecode compilation or
 low-level optimization.
 """
+
 import asyncio
 import logging
 import time
@@ -32,12 +33,13 @@ import weakref
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
-R = TypeVar('R')
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 class OptimizationLevel(Enum):
     """Optimization levels"""
+
     NONE = 0
     BASIC = 1
     MODERATE = 2
@@ -47,6 +49,7 @@ class OptimizationLevel(Enum):
 
 class CacheStrategy(Enum):
     """Caching strategies"""
+
     NONE = "none"
     LRU = "lru"
     LFU = "lfu"
@@ -57,11 +60,12 @@ class CacheStrategy(Enum):
 @dataclass
 class ExecutionProfile:
     """Profile of function execution"""
+
     function_id: str
     call_count: int = 0
     total_time_ms: float = 0.0
     avg_time_ms: float = 0.0
-    min_time_ms: float = float('inf')
+    min_time_ms: float = float("inf")
     max_time_ms: float = 0.0
     last_call: Optional[str] = None
     hot_path: bool = False
@@ -92,26 +96,30 @@ class ExecutionProfile:
             "callCount": self.call_count,
             "totalTimeMs": self.total_time_ms,
             "avgTimeMs": self.avg_time_ms,
-            "minTimeMs": self.min_time_ms if self.min_time_ms != float('inf') else 0,
+            "minTimeMs": self.min_time_ms if self.min_time_ms != float("inf") else 0,
             "maxTimeMs": self.max_time_ms,
             "hotPath": self.hot_path,
             "optimizationLevel": self.optimization_level.value,
-            "cacheHitRate": self.cache_hit_rate
+            "cacheHitRate": self.cache_hit_rate,
         }
 
 
 class AdaptiveCache(Generic[T]):
     """Adaptive caching with multiple strategies"""
 
-    def __init__(self,
-                 max_size: int = 1000,
-                 ttl_seconds: float = 300.0,
-                 strategy: CacheStrategy = CacheStrategy.ADAPTIVE):
+    def __init__(
+        self,
+        max_size: int = 1000,
+        ttl_seconds: float = 300.0,
+        strategy: CacheStrategy = CacheStrategy.ADAPTIVE,
+    ):
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
         self.strategy = strategy
 
-        self._cache: Dict[str, Tuple[T, float, int]] = {}  # key -> (value, timestamp, access_count)
+        self._cache: Dict[str, Tuple[T, float, int]] = (
+            {}
+        )  # key -> (value, timestamp, access_count)
         self._access_order: deque = deque()
         self._lock = threading.RLock()
 
@@ -216,16 +224,14 @@ class AdaptiveCache(Generic[T]):
             "hits": self._hits,
             "misses": self._misses,
             "hitRate": self.hit_rate,
-            "strategy": self.strategy.value
+            "strategy": self.strategy.value,
         }
 
 
 class HotPathDetector:
     """Detects hot code paths for optimization"""
 
-    def __init__(self,
-                 threshold_calls: int = 100,
-                 threshold_time_percent: float = 0.1):
+    def __init__(self, threshold_calls: int = 100, threshold_time_percent: float = 0.1):
         self.threshold_calls = threshold_calls
         self.threshold_time_percent = threshold_time_percent
         self._profiles: Dict[str, ExecutionProfile] = {}
@@ -398,10 +404,12 @@ class BatchingStrategy(OptimizationStrategy):
 class AdaptiveJIT:
     """Main self-adapting JIT optimizer"""
 
-    def __init__(self,
-                 auto_optimize: bool = True,
-                 optimization_threshold: int = 50,
-                 cache_size: int = 10000):
+    def __init__(
+        self,
+        auto_optimize: bool = True,
+        optimization_threshold: int = 50,
+        cache_size: int = 10000,
+    ):
         self.auto_optimize = auto_optimize
         self.optimization_threshold = optimization_threshold
 
@@ -465,7 +473,9 @@ class AdaptiveJIT:
         else:
             level = OptimizationLevel.BASIC
 
-        strategy = self._strategies.get(level, self._strategies[OptimizationLevel.BASIC])
+        strategy = self._strategies.get(
+            level, self._strategies[OptimizationLevel.BASIC]
+        )
 
         optimized = strategy.optimize(func, profile)
         self._optimized_functions[func_id] = optimized
@@ -475,11 +485,13 @@ class AdaptiveJIT:
 
     def profile(self, func: Callable = None, name: str = None):
         """Decorator to profile and optimize a function"""
+
         def decorator(fn: Callable) -> Callable:
             func_id = name or f"{fn.__module__}.{fn.__name__}"
             self._original_functions[func_id] = fn
 
             if asyncio.iscoroutinefunction(fn):
+
                 @functools.wraps(fn)
                 async def profiled_async(*args, **kwargs):
                     # Check for optimized version
@@ -497,6 +509,7 @@ class AdaptiveJIT:
 
                 return profiled_async
             else:
+
                 @functools.wraps(fn)
                 def profiled(*args, **kwargs):
                     if func_id in self._optimized_functions:
@@ -519,10 +532,12 @@ class AdaptiveJIT:
 
     def memoize(self, func: Callable = None, ttl: float = None):
         """Decorator for explicit memoization"""
+
         def decorator(fn: Callable) -> Callable:
             cache = AdaptiveCache(ttl_seconds=ttl or 300.0)
 
             if asyncio.iscoroutinefunction(fn):
+
                 @functools.wraps(fn)
                 async def memoized(*args, **kwargs):
                     key = hashlib.md5(
@@ -539,6 +554,7 @@ class AdaptiveJIT:
 
                 return memoized
             else:
+
                 @functools.wraps(fn)
                 def memoized(*args, **kwargs):
                     key = hashlib.md5(
@@ -572,8 +588,8 @@ class AdaptiveJIT:
             "topFunctions": sorted(
                 [p.to_dict() for p in profiles],
                 key=lambda x: x["callCount"],
-                reverse=True
-            )[:10]
+                reverse=True,
+            )[:10],
         }
 
     def get_profile(self, func_id: str) -> Optional[Dict[str, Any]]:
@@ -584,6 +600,7 @@ class AdaptiveJIT:
 
 # Global JIT instance
 _jit: Optional[AdaptiveJIT] = None
+
 
 def get_adaptive_jit() -> AdaptiveJIT:
     """Get or create the adaptive JIT singleton"""

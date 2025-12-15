@@ -17,6 +17,7 @@ metrics = get_metrics_collector()
 
 class AgentCapability(Enum):
     """Enumerates generic capabilities that agents may possess."""
+
     DATA_PROCESSING = "data_processing"
     API_INTEGRATION = "api_integration"
     DECISION_MAKING = "decision_making"
@@ -31,6 +32,7 @@ class AgentCapability(Enum):
 
 class AgentState(Enum):
     """Simple lifecycle states for an agent."""
+
     IDLE = "idle"
     ACTIVE = "active"
     BUSY = "busy"
@@ -42,6 +44,7 @@ class AgentState(Enum):
 @dataclass
 class AgentContext:
     """Context information passed to agents during task execution."""
+
     agent_id: str
     current_time: float
     system_load: float
@@ -56,6 +59,7 @@ class AgentContext:
 @dataclass
 class TaskResult:
     """Result container returned by agents after executing a task."""
+
     success: bool
     result_data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
@@ -86,60 +90,74 @@ class BaseAgent:
     DEFAULT_TIMEOUT = 60.0  # seconds
     MAX_RETRIES = 3
 
-    def __init__(self, agent_id: str, capabilities: List[AgentCapability], config: Dict[str, Any]):
+    def __init__(
+        self, agent_id: str, capabilities: List[AgentCapability], config: Dict[str, Any]
+    ):
         self.agent_id = agent_id
         self.capabilities = capabilities
         self.config = config
         self.state = AgentState.IDLE
-        self.max_task_history = config.get('max_task_history', 1000)
-        self.default_timeout = config.get('timeout', self.DEFAULT_TIMEOUT)
+        self.max_task_history = config.get("max_task_history", 1000)
+        self.default_timeout = config.get("timeout", self.DEFAULT_TIMEOUT)
         self.task_history: List[TaskResult] = []
         self._consecutive_failures = 0
         self._lock = asyncio.Lock()
 
         # Initialize metrics
         metrics.update_agent_health(agent_id, True)
-        metrics.update_agent_reliability(agent_id, config.get('reliability_score', 0.95))
+        metrics.update_agent_reliability(
+            agent_id, config.get("reliability_score", 0.95)
+        )
 
-        logger.info(f"BaseAgent {agent_id} initialized", extra={
-            'capabilities': [c.value for c in capabilities],
-            'timeout': self.default_timeout
-        })
+        logger.info(
+            f"BaseAgent {agent_id} initialized",
+            extra={
+                "capabilities": [c.value for c in capabilities],
+                "timeout": self.default_timeout,
+            },
+        )
 
     @log_performance
-    async def execute_with_timeout(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
+    async def execute_with_timeout(
+        self, task: Dict[str, Any], context: AgentContext
+    ) -> TaskResult:
         """
         Execute task with timeout, state management, and error handling.
         This is the main entry point that wraps execute_task.
         """
         timeout = context.timeout if context.timeout else self.default_timeout
         start_time = time.time()
-        task_id = task.get('task_id', 'unknown')
+        task_id = task.get("task_id", "unknown")
 
         async with self._lock:
             self.state = AgentState.BUSY
 
         try:
             result = await asyncio.wait_for(
-                self.execute_task(task, context),
-                timeout=timeout
+                self.execute_task(task, context), timeout=timeout
             )
             result.execution_time = time.time() - start_time
 
             if result.success:
                 self._consecutive_failures = 0
-                logger.info(f"Task completed", extra={
-                    'agent_id': self.agent_id,
-                    'task_id': task_id,
-                    'duration_ms': result.execution_time * 1000
-                })
+                logger.info(
+                    f"Task completed",
+                    extra={
+                        "agent_id": self.agent_id,
+                        "task_id": task_id,
+                        "duration_ms": result.execution_time * 1000,
+                    },
+                )
             else:
                 self._consecutive_failures += 1
-                logger.warning(f"Task failed", extra={
-                    'agent_id': self.agent_id,
-                    'task_id': task_id,
-                    'error': result.error_message
-                })
+                logger.warning(
+                    f"Task failed",
+                    extra={
+                        "agent_id": self.agent_id,
+                        "task_id": task_id,
+                        "error": result.error_message,
+                    },
+                )
 
             self.record_task_result(result)
             return result
@@ -150,14 +168,17 @@ class BaseAgent:
                 success=False,
                 error_message=f"Task timed out after {timeout}s",
                 execution_time=time.time() - start_time,
-                retryable=True
+                retryable=True,
             )
             self.record_task_result(result)
-            logger.error(f"Task timed out", extra={
-                'agent_id': self.agent_id,
-                'task_id': task_id,
-                'timeout': timeout
-            })
+            logger.error(
+                f"Task timed out",
+                extra={
+                    "agent_id": self.agent_id,
+                    "task_id": task_id,
+                    "timeout": timeout,
+                },
+            )
             metrics.record_error("TimeoutError")
             return result
 
@@ -167,15 +188,19 @@ class BaseAgent:
                 success=False,
                 error_message=str(e),
                 execution_time=time.time() - start_time,
-                retryable=self._is_retryable_error(e)
+                retryable=self._is_retryable_error(e),
             )
             self.record_task_result(result)
-            logger.error(f"Task exception", extra={
-                'agent_id': self.agent_id,
-                'task_id': task_id,
-                'error': str(e),
-                'error_type': type(e).__name__
-            }, exc_info=True)
+            logger.error(
+                f"Task exception",
+                extra={
+                    "agent_id": self.agent_id,
+                    "task_id": task_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True,
+            )
             metrics.record_error(type(e).__name__)
             return result
 
@@ -192,9 +217,16 @@ class BaseAgent:
     def _is_retryable_error(self, error: Exception) -> bool:
         """Determine if an error is transient and worth retrying."""
         retryable_patterns = [
-            'timeout', 'connection', 'network', 'temporary',
-            'rate limit', 'too many requests', 'unavailable',
-            'service temporarily', 'try again', 'EAGAIN'
+            "timeout",
+            "connection",
+            "network",
+            "temporary",
+            "rate limit",
+            "too many requests",
+            "unavailable",
+            "service temporarily",
+            "try again",
+            "EAGAIN",
         ]
         error_str = str(error).lower()
         return any(pattern in error_str for pattern in retryable_patterns)
@@ -203,8 +235,10 @@ class BaseAgent:
         """Store the result of a completed task for later analysis."""
         self.task_history.append(result)
         if len(self.task_history) > self.max_task_history:
-            self.task_history = self.task_history[-self.max_task_history:]
-        logger.debug(f"Agent {self.agent_id} recorded task result: success={result.success}")
+            self.task_history = self.task_history[-self.max_task_history :]
+        logger.debug(
+            f"Agent {self.agent_id} recorded task result: success={result.success}"
+        )
 
     async def recover(self) -> bool:
         """Attempt to recover from failed state."""
@@ -236,10 +270,12 @@ class BaseAgent:
             "healthy": self.state not in [AgentState.FAILED, AgentState.DEGRADED],
             "success_rate": self.get_success_rate(),
             "task_count": len(self.task_history),
-            "consecutive_failures": self._consecutive_failures
+            "consecutive_failures": self._consecutive_failures,
         }
 
-    async def execute_task(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
+    async def execute_task(
+        self, task: Dict[str, Any], context: AgentContext
+    ) -> TaskResult:
         """Subclasses must implement this method."""
         raise NotImplementedError("Subclasses must implement execute_task")
 
@@ -252,5 +288,5 @@ class BaseAgent:
             "success_rate": self.get_success_rate(),
             "capabilities": [c.value for c in self.capabilities],
             "consecutive_failures": self._consecutive_failures,
-            "config": {k: v for k, v in self.config.items() if not k.startswith('_')}
+            "config": {k: v for k, v in self.config.items() if not k.startswith("_")},
         }

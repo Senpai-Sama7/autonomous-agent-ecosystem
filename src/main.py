@@ -1,7 +1,4 @@
-"""
-Autonomous Agent Ecosystem - Main Application
-Updated by C0Di3 to support Declarative Workflows and Templating.
-"""
+"""Main entrypoint for Astro."""
 
 import asyncio
 import json
@@ -12,11 +9,9 @@ import os
 
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.logger import configure_logging, get_logger
-from core.engine import AgentEngine, AgentConfig, Workflow, Task, WorkflowPriority
-from core.nl_interface import NaturalLanguageInterface
+def main() -> None:
+    """Entrypoint executed via ``python -m src.main``."""
 
 # from agents.research_agent import ResearchAgent  # Temporarily disabled
 from agents.base_agent import TaskResult
@@ -423,4 +418,4 @@ async def interactive_mode(ecosystem, args):
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

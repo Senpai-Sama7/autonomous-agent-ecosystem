@@ -329,9 +329,9 @@ class AgentEngine:
                     self._self_healing.register_component(
                         component_id=agent_id,
                         health_check=instance.health_check,
-                        recovery_callback=instance.recover
-                        if hasattr(instance, "recover")
-                        else None,
+                        recovery_callback=(
+                            instance.recover if hasattr(instance, "recover") else None
+                        ),
                     )
                 # Create circuit breaker for each agent
                 self._circuit_breakers[agent_id] = get_circuit_breaker(
@@ -584,9 +584,11 @@ class AgentEngine:
                 f"Executing task {task.task_id}",
                 extra={
                     "agent_id": agent_id,
-                    "task_type": task.required_capabilities[0]
-                    if task.required_capabilities
-                    else "generic",
+                    "task_type": (
+                        task.required_capabilities[0]
+                        if task.required_capabilities
+                        else "generic"
+                    ),
                     "workflow_id": workflow_id,
                 },
             )
@@ -597,7 +599,7 @@ class AgentEngine:
                 raise ValueError(f"Agent instance for {agent_id} not found")
 
             # Execute using the real agent instance with circuit breaker protection
-            from agents.base_agent import AgentContext
+            from src.agents.base_agent import AgentContext
 
             context = AgentContext(
                 agent_id=agent_id,
@@ -728,18 +730,22 @@ class AgentEngine:
 
                     context = {
                         "agent_id": agent_id,
-                        "task_type": task.required_capabilities[0]
-                        if task.required_capabilities
-                        else "generic",
+                        "task_type": (
+                            task.required_capabilities[0]
+                            if task.required_capabilities
+                            else "generic"
+                        ),
                         "priority": str(task.priority),
                         "has_dependencies": bool(task.dependencies),
                     }
                     outcome = {
                         "execution_time": execution_time,
                         "success": success,
-                        "result_summary": str(result.result_data)[:100]
-                        if result and result.success
-                        else None,
+                        "result_summary": (
+                            str(result.result_data)[:100]
+                            if result and result.success
+                            else None
+                        ),
                     }
                     # Reward: 1.0 for fast success, 0.5 for slow success, -0.5 for failure
                     if success:

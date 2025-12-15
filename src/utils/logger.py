@@ -13,6 +13,7 @@ Usage:
     # In any module
     logger = get_logger(__name__)
 """
+
 import logging
 import sys
 import os
@@ -25,8 +26,8 @@ _logging_configured = False
 _logging_lock = threading.Lock()
 
 # Default format
-DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DEFAULT_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def configure_logging(
@@ -34,7 +35,7 @@ def configure_logging(
     log_dir: str = "logs",
     log_to_file: bool = True,
     log_format: Optional[str] = None,
-    date_format: Optional[str] = None
+    date_format: Optional[str] = None,
 ) -> None:
     """
     Configure the root logger for the entire application.
@@ -64,8 +65,7 @@ def configure_logging(
 
         # Formatter
         formatter = logging.Formatter(
-            log_format or DEFAULT_FORMAT,
-            datefmt=date_format or DEFAULT_DATE_FORMAT
+            log_format or DEFAULT_FORMAT, datefmt=date_format or DEFAULT_DATE_FORMAT
         )
 
         # Console Handler
@@ -84,14 +84,16 @@ def configure_logging(
                     os.path.join(log_dir, "ecosystem.log"),
                     maxBytes=10 * 1024 * 1024,  # 10MB
                     backupCount=5,
-                    encoding='utf-8'
+                    encoding="utf-8",
                 )
                 file_handler.setFormatter(formatter)
                 file_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
                 root_logger.addHandler(file_handler)
             except (OSError, PermissionError) as e:
                 # Log to console only if file logging fails
-                root_logger.warning(f"Could not create log file: {e}. Logging to console only.")
+                root_logger.warning(
+                    f"Could not create log file: {e}. Logging to console only."
+                )
 
         _logging_configured = True
         root_logger.debug("Logging configured successfully")
@@ -118,7 +120,9 @@ def get_logger(name: str) -> logging.Logger:
 
 
 # Legacy function for backwards compatibility
-def setup_logging(name: str, log_level: str = "INFO", log_dir: str = "logs") -> logging.Logger:
+def setup_logging(
+    name: str, log_level: str = "INFO", log_dir: str = "logs"
+) -> logging.Logger:
     """
     DEPRECATED: Use configure_logging() at startup and get_logger() in modules.
 
@@ -126,10 +130,11 @@ def setup_logging(name: str, log_level: str = "INFO", log_dir: str = "logs") -> 
     if called multiple times with the same name.
     """
     import warnings
+
     warnings.warn(
         "setup_logging() is deprecated. Use configure_logging() at startup and get_logger() in modules.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Ensure global config is set

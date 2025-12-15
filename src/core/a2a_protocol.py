@@ -3,6 +3,7 @@ A2A (Agent-to-Agent) Communication Protocol
 Enterprise-grade implementation for direct agent communication and collaboration.
 Based on Google's Agent-to-Agent protocol specifications.
 """
+
 import asyncio
 import json
 import logging
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class A2AMessageType(Enum):
     """A2A message types"""
+
     TASK_REQUEST = "task_request"
     TASK_RESPONSE = "task_response"
     CAPABILITY_QUERY = "capability_query"
@@ -34,6 +36,7 @@ class A2AMessageType(Enum):
 
 class A2ATaskState(Enum):
     """Task states in A2A protocol"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -45,6 +48,7 @@ class A2ATaskState(Enum):
 @dataclass
 class AgentCard:
     """Agent identity and capability card (A2A spec)"""
+
     agent_id: str
     name: str
     description: str
@@ -65,7 +69,7 @@ class AgentCard:
             "skills": self.skills,
             "endpoint": self.endpoint,
             "authSchemes": self.auth_schemes,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     @classmethod
@@ -79,13 +83,14 @@ class AgentCard:
             skills=data.get("skills", []),
             endpoint=data.get("endpoint"),
             auth_schemes=data.get("authSchemes", []),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
 
 @dataclass
 class A2AMessage:
     """A2A protocol message"""
+
     message_id: str
     message_type: A2AMessageType
     sender_id: str
@@ -102,7 +107,7 @@ class A2AMessage:
             "recipientId": self.recipient_id,
             "payload": self.payload,
             "timestamp": self.timestamp,
-            "correlationId": self.correlation_id
+            "correlationId": self.correlation_id,
         }
 
     @classmethod
@@ -114,13 +119,14 @@ class A2AMessage:
             recipient_id=data["recipientId"],
             payload=data["payload"],
             timestamp=data.get("timestamp", datetime.now().isoformat()),
-            correlation_id=data.get("correlationId")
+            correlation_id=data.get("correlationId"),
         )
 
 
 @dataclass
 class A2ATask:
     """Task shared between agents"""
+
     task_id: str
     name: str
     description: str
@@ -149,7 +155,7 @@ class A2ATask:
             "updatedAt": self.updated_at,
             "priority": self.priority,
             "dependencies": self.dependencies,
-            "artifacts": self.artifacts
+            "artifacts": self.artifacts,
         }
 
 
@@ -198,10 +204,7 @@ class MessageBus:
         """Process messages from queue"""
         while self._running:
             try:
-                message = await asyncio.wait_for(
-                    self._message_queue.get(),
-                    timeout=1.0
-                )
+                message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
                 await self._deliver_message(message)
             except asyncio.TimeoutError:
                 continue
@@ -257,8 +260,13 @@ class A2AAgent(ABC):
         else:
             logger.warning(f"Unhandled message type: {message.message_type}")
 
-    async def send_message(self, recipient_id: str, msg_type: A2AMessageType,
-                          payload: Dict[str, Any], correlation_id: Optional[str] = None):
+    async def send_message(
+        self,
+        recipient_id: str,
+        msg_type: A2AMessageType,
+        payload: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+    ):
         """Send a message to another agent"""
         message = A2AMessage(
             message_id=str(uuid.uuid4()),
@@ -266,7 +274,7 @@ class A2AAgent(ABC):
             sender_id=self.card.agent_id,
             recipient_id=recipient_id,
             payload=payload,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         await self.message_bus.publish(message)
 
@@ -276,31 +284,22 @@ class A2AAgent(ABC):
         self._pending_tasks[task.task_id] = task
 
         await self.send_message(
-            recipient_id,
-            A2AMessageType.TASK_REQUEST,
-            {"task": task.to_dict()}
+            recipient_id, A2AMessageType.TASK_REQUEST, {"task": task.to_dict()}
         )
         return task.task_id
 
     async def query_capabilities(self, recipient_id: str):
         """Query another agent's capabilities"""
-        await self.send_message(
-            recipient_id,
-            A2AMessageType.CAPABILITY_QUERY,
-            {}
-        )
+        await self.send_message(recipient_id, A2AMessageType.CAPABILITY_QUERY, {})
 
-    async def request_collaboration(self, recipient_id: str, task_id: str,
-                                    role: str, context: Dict[str, Any]):
+    async def request_collaboration(
+        self, recipient_id: str, task_id: str, role: str, context: Dict[str, Any]
+    ):
         """Request collaboration on a task"""
         await self.send_message(
             recipient_id,
             A2AMessageType.COLLABORATION_REQUEST,
-            {
-                "taskId": task_id,
-                "role": role,
-                "context": context
-            }
+            {"taskId": task_id, "role": role, "context": context},
         )
 
     async def _handle_task_request(self, message: A2AMessage):
@@ -311,7 +310,7 @@ class A2AAgent(ABC):
             name=task_data["name"],
             description=task_data["description"],
             input_data=task_data["inputData"],
-            owner_agent_id=message.sender_id
+            owner_agent_id=message.sender_id,
         )
 
         # Check if we can handle this task
@@ -333,7 +332,7 @@ class A2AAgent(ABC):
                 message.sender_id,
                 A2AMessageType.TASK_RESPONSE,
                 {"task": task.to_dict()},
-                correlation_id=message.message_id
+                correlation_id=message.message_id,
             )
         else:
             # Reject task
@@ -341,7 +340,7 @@ class A2AAgent(ABC):
                 message.sender_id,
                 A2AMessageType.ERROR,
                 {"error": "Cannot handle task", "taskId": task.task_id},
-                correlation_id=message.message_id
+                correlation_id=message.message_id,
             )
 
     async def _handle_task_response(self, message: A2AMessage):
@@ -361,7 +360,7 @@ class A2AAgent(ABC):
             message.sender_id,
             A2AMessageType.CAPABILITY_RESPONSE,
             {"card": self.card.to_dict()},
-            correlation_id=message.message_id
+            correlation_id=message.message_id,
         )
 
     async def _handle_collaboration_request(self, message: A2AMessage):
@@ -372,14 +371,14 @@ class A2AAgent(ABC):
                 message.sender_id,
                 A2AMessageType.COLLABORATION_ACCEPT,
                 {"taskId": message.payload.get("taskId")},
-                correlation_id=message.message_id
+                correlation_id=message.message_id,
             )
         else:
             await self.send_message(
                 message.sender_id,
                 A2AMessageType.COLLABORATION_REJECT,
                 {"taskId": message.payload.get("taskId")},
-                correlation_id=message.message_id
+                correlation_id=message.message_id,
             )
 
     async def _handle_status_update(self, message: A2AMessage):
@@ -441,7 +440,9 @@ class A2ACoordinator:
             del self._agents[agent_id]
             del self._agent_cards[agent_id]
 
-    def find_capable_agent(self, required_capabilities: List[str]) -> Optional[AgentCard]:
+    def find_capable_agent(
+        self, required_capabilities: List[str]
+    ) -> Optional[AgentCard]:
         """Find an agent with required capabilities"""
         for card in self._agent_cards.values():
             if all(cap in card.capabilities for cap in required_capabilities):
@@ -451,8 +452,7 @@ class A2ACoordinator:
     def get_all_capabilities(self) -> Dict[str, List[str]]:
         """Get all capabilities across agents"""
         return {
-            agent_id: card.capabilities
-            for agent_id, card in self._agent_cards.items()
+            agent_id: card.capabilities for agent_id, card in self._agent_cards.items()
         }
 
     async def broadcast_task(self, task: A2ATask) -> Optional[str]:
@@ -468,6 +468,7 @@ class A2ACoordinator:
 
 # Singleton coordinator instance
 _coordinator: Optional[A2ACoordinator] = None
+
 
 def get_a2a_coordinator() -> A2ACoordinator:
     """Get or create the A2A coordinator singleton"""
