@@ -46,7 +46,12 @@ class ConfigLoader:
     """Load and manage configuration from files and environment variables"""
 
     def __init__(self, config_dir: str = "config"):
-        self.config_dir = config_dir
+        self.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        self.config_dir = (
+            config_dir
+            if os.path.isabs(config_dir)
+            else os.path.join(self.repo_root, config_dir)
+        )
         self.system_config = SystemConfig()
         self.llm_config = LLMConfig()
         self.agent_configs: Dict[str, Any] = {}
@@ -100,6 +105,14 @@ class ConfigLoader:
         if os.getenv("LLM_PROVIDER"):
             self.llm_config.provider = os.getenv("LLM_PROVIDER")
 
+    def _resolve_config_path(self, file_path: str) -> str:
+        """Resolve a file path relative to the repository config directory."""
+
+        if os.path.isabs(file_path):
+            return file_path
+
+        return os.path.join(self.config_dir, file_path)
+
     def _load_agent_configs(self):
         """Load individual agent configurations"""
         agents_path = os.path.join(self.config_dir, "agents.yaml")
@@ -128,6 +141,37 @@ class ConfigLoader:
         """Public method to load and return agent configurations"""
         self._load_agent_configs()
         return self.agent_configs
+
+    def load_workflows(self, workflow_path: Optional[str] = None) -> Dict[str, Any]:
+        """Load sample workflows with support for CLI and environment overrides."""
+
+        override_path = workflow_path or os.getenv("SAMPLE_WORKFLOWS") or os.getenv(
+            "WORKFLOWS_FILE"
+        )
+        resolved_path = self._resolve_config_path(override_path or "simple_test.yaml")
+
+        if not os.path.exists(resolved_path):
+            logger.warning(
+                "No workflow file found; expected at %s. Skipping sample workflows.",
+                resolved_path,
+            )
+            return {}
+
+        try:
+            with open(resolved_path, "r") as file:
+                data = yaml.safe_load(file) or {}
+                if not isinstance(data, dict):
+                    logger.error(
+                        "Workflow file %s is not a mapping. Unable to load workflows.",
+                        resolved_path,
+                    )
+                    return {}
+
+                logger.info("Loaded workflows from %s", resolved_path)
+                return data
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Failed to load workflows from %s: %s", resolved_path, exc)
+            return {}
 
     # --- Factory Method for Agentic Workflow Generation ---
 
