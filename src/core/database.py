@@ -142,11 +142,12 @@ class DatabaseManager:
 
     def _ensure_sync_init(self) -> None:
         """Ensure synchronous schema is initialized before direct writes."""
-        if self._sync_initialized:
-            return
-        if self._closed:
-            raise RuntimeError("DatabaseManager has been closed")
-        self._init_db_sync()
+        with self._sync_init_lock:
+            if self._sync_initialized:
+                return
+            if self._closed:
+                raise RuntimeError("DatabaseManager has been closed")
+            self._init_db_sync()
 
     async def _create_tables(self, db):
         """Create tables asynchronously"""
