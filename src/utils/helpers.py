@@ -1,14 +1,17 @@
 """
 Helper utilities for data processing and validation
 """
+
 import json
 import re
 from typing import Dict, Any, List, Optional
 import hashlib
 
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize a string to be safe for use as a filename"""
-    return re.sub(r'[^\w\-_\. ]', '_', filename)
+    return re.sub(r"[^\w\-_\. ]", "_", filename)
+
 
 def calculate_checksum(data: Any) -> str:
     """Calculate SHA-256 checksum of a dictionary or string"""
@@ -17,6 +20,7 @@ def calculate_checksum(data: Any) -> str:
     else:
         content = str(data)
     return hashlib.sha256(content.encode()).hexdigest()
+
 
 def validate_json_schema(data: Dict, schema: Dict[str, type]) -> bool:
     """
@@ -47,11 +51,12 @@ def validate_json_schema(data: Dict, schema: Dict[str, type]) -> bool:
             return False
     return True
 
+
 def truncate_text(text: str, max_length: int = 1000) -> str:
     """Truncate text to max_length while preserving whole words if possible"""
     if len(text) <= max_length:
         return text
-    return text[:max_length].rsplit(' ', 1)[0] + '...'
+    return text[:max_length].rsplit(" ", 1)[0] + "..."
 
 
 def sanitize_display_text(text: str, max_length: int = 10000) -> str:
@@ -82,17 +87,17 @@ def sanitize_display_text(text: str, max_length: int = 10000) -> str:
 
     # Remove NULL bytes and other control characters (except \n, \r, \t)
     # Control chars are 0x00-0x1F and 0x7F, but we keep 0x09 (tab), 0x0A (newline), 0x0D (carriage return)
-    sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
 
     # Remove ANSI escape sequences (terminal color codes, etc.)
-    sanitized = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', sanitized)
+    sanitized = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", sanitized)
 
     # Remove other escape sequences
-    sanitized = re.sub(r'\x1b[^a-zA-Z]*[a-zA-Z]', '', sanitized)
+    sanitized = re.sub(r"\x1b[^a-zA-Z]*[a-zA-Z]", "", sanitized)
 
     # Limit length to prevent memory issues in GUI widgets
     if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length] + '\n... (truncated)'
+        sanitized = sanitized[:max_length] + "\n... (truncated)"
 
     return sanitized
 

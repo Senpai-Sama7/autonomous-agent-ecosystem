@@ -1,6 +1,7 @@
 """
 Workflows Router - API endpoints for workflow management
 """
+
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -42,18 +43,29 @@ async def get_workflows():
 
     workflows = []
     for wf_id, workflow in _app_state.engine.workflows.items():
-        completed = sum(1 for t in workflow.tasks if t.task_id in _app_state.engine.completed_tasks)
+        completed = sum(
+            1 for t in workflow.tasks if t.task_id in _app_state.engine.completed_tasks
+        )
         total = len(workflow.tasks)
 
-        workflows.append({
-            "id": wf_id,
-            "name": workflow.name,
-            "description": "",
-            "status": "completed" if completed == total else "running" if completed > 0 else "pending",
-            "priority": workflow.priority.value,
-            "progress": int((completed / total) * 100) if total > 0 else 0,
-            "tasks": [{"id": t.task_id, "description": t.description} for t in workflow.tasks],
-        })
+        workflows.append(
+            {
+                "id": wf_id,
+                "name": workflow.name,
+                "description": "",
+                "status": (
+                    "completed"
+                    if completed == total
+                    else "running" if completed > 0 else "pending"
+                ),
+                "priority": workflow.priority.value,
+                "progress": int((completed / total) * 100) if total > 0 else 0,
+                "tasks": [
+                    {"id": t.task_id, "description": t.description}
+                    for t in workflow.tasks
+                ],
+            }
+        )
 
     return workflows
 
@@ -75,12 +87,14 @@ async def create_workflow(request: WorkflowCreateRequest):
 
     tasks = []
     for i, task_data in enumerate(request.tasks):
-        tasks.append(_task_class(
-            task_id=f"{workflow_id}_task_{i}",
-            description=task_data.get("description", f"Task {i+1}"),
-            required_capabilities=task_data.get("capabilities", []),
-            priority=priority_map.get(request.priority, _workflow_priority.MEDIUM),
-        ))
+        tasks.append(
+            _task_class(
+                task_id=f"{workflow_id}_task_{i}",
+                description=task_data.get("description", f"Task {i+1}"),
+                required_capabilities=task_data.get("capabilities", []),
+                priority=priority_map.get(request.priority, _workflow_priority.MEDIUM),
+            )
+        )
 
     workflow = _workflow_class(
         workflow_id=workflow_id,
@@ -92,12 +106,15 @@ async def create_workflow(request: WorkflowCreateRequest):
     await _app_state.engine.submit_workflow(workflow)
 
     if _manager:
-        await _manager.broadcast("log", {
-            "timestamp": datetime.now().strftime("%H:%M"),
-            "type": "workflow",
-            "title": "Workflow Created",
-            "message": f"Created workflow: {request.name}",
-        })
+        await _manager.broadcast(
+            "log",
+            {
+                "timestamp": datetime.now().strftime("%H:%M"),
+                "type": "workflow",
+                "title": "Workflow Created",
+                "message": f"Created workflow: {request.name}",
+            },
+        )
 
     return {"id": workflow_id, "name": request.name, "status": "created"}
 
@@ -109,18 +126,26 @@ async def get_workflow(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     workflow = _app_state.engine.workflows[workflow_id]
-    completed = sum(1 for t in workflow.tasks if t.task_id in _app_state.engine.completed_tasks)
+    completed = sum(
+        1 for t in workflow.tasks if t.task_id in _app_state.engine.completed_tasks
+    )
 
     return {
         "id": workflow_id,
         "name": workflow.name,
         "status": "completed" if completed == len(workflow.tasks) else "running",
-        "progress": int((completed / len(workflow.tasks)) * 100) if workflow.tasks else 0,
+        "progress": (
+            int((completed / len(workflow.tasks)) * 100) if workflow.tasks else 0
+        ),
         "tasks": [
             {
                 "id": t.task_id,
                 "description": t.description,
-                "status": "completed" if t.task_id in _app_state.engine.completed_tasks else "pending",
+                "status": (
+                    "completed"
+                    if t.task_id in _app_state.engine.completed_tasks
+                    else "pending"
+                ),
             }
             for t in workflow.tasks
         ],

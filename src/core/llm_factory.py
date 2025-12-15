@@ -3,6 +3,7 @@ LLM Client Factory
 Centralizes the creation of LLM clients for OpenAI, OpenRouter, and Ollama.
 Supports both Async and Sync clients.
 """
+
 import os
 import logging
 from typing import Optional, Any
@@ -11,6 +12,7 @@ logger = logging.getLogger("LLMFactory")
 
 try:
     from openai import OpenAI, AsyncOpenAI
+
     HAS_OPENAI = True
 except ImportError:
     OpenAI = None
@@ -18,11 +20,14 @@ except ImportError:
     HAS_OPENAI = False
     logger.warning("OpenAI library not found. LLM features will be disabled.")
 
+
 class LLMFactory:
     @staticmethod
-    def create_client(provider: str = "openai",
-                      api_key: Optional[str] = None,
-                      base_url: Optional[str] = None) -> Optional[Any]:
+    def create_client(
+        provider: str = "openai",
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> Optional[Any]:
         """
         Create and return an Async LLM client (AsyncOpenAI) based on the provider.
         Preferred for this async ecosystem.
@@ -46,9 +51,11 @@ class LLMFactory:
             return None
 
     @staticmethod
-    def create_sync_client(provider: str = "openai",
-                           api_key: Optional[str] = None,
-                           base_url: Optional[str] = None) -> Optional[Any]:
+    def create_sync_client(
+        provider: str = "openai",
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> Optional[Any]:
         """
         Create and return a Sync LLM client (OpenAI).
         Use only if absolutely necessary (e.g. legacy code).
@@ -72,12 +79,17 @@ class LLMFactory:
             return None
 
     @staticmethod
-    def _get_config(provider: str, api_key: Optional[str], base_url: Optional[str]) -> tuple:
+    def _get_config(
+        provider: str, api_key: Optional[str], base_url: Optional[str]
+    ) -> tuple:
         if provider == "openai":
             return api_key or os.getenv("OPENAI_API_KEY"), base_url
 
         elif provider == "openrouter":
-            return api_key or os.getenv("OPENROUTER_API_KEY"), base_url or "https://openrouter.ai/api/v1"
+            return (
+                api_key or os.getenv("OPENROUTER_API_KEY"),
+                base_url or "https://openrouter.ai/api/v1",
+            )
 
         elif provider == "ollama":
             return "ollama", base_url or "http://localhost:11434/v1"

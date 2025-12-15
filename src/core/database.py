@@ -103,6 +103,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.connection_timeout = connection_timeout
         self._async_initialized = False
+        self._sync_initialized = False
         self._closed = False
         self._pool: Optional[ConnectionPool] = None
         self._pool_size = pool_size
@@ -137,28 +138,43 @@ class DatabaseManager:
         self._create_tables_sync(c)
         conn.commit()
         conn.close()
+        self._sync_initialized = True
+
+    def _ensure_sync_init(self) -> None:
+        """Ensure synchronous schema is initialized before direct writes."""
+        with self._sync_init_lock:
+            if self._sync_initialized:
+                return
+            if self._closed:
+                raise RuntimeError("DatabaseManager has been closed")
+            self._init_db_sync()
 
     async def _create_tables(self, db):
         """Create tables asynchronously"""
         # Agents table
-        await db.execute("""CREATE TABLE IF NOT EXISTS agents
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS agents
                          (agent_id TEXT PRIMARY KEY,
                           config TEXT,
                           state TEXT,
                           reliability_score REAL,
-                          last_updated TIMESTAMP)""")
+                          last_updated TIMESTAMP)"""
+        )
 
         # Workflows table
-        await db.execute("""CREATE TABLE IF NOT EXISTS workflows
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS workflows
                          (workflow_id TEXT PRIMARY KEY,
                           name TEXT,
                           status TEXT,
                           priority TEXT,
                           created_at TIMESTAMP,
-                          completed_at TIMESTAMP)""")
+                          completed_at TIMESTAMP)"""
+        )
 
         # Tasks table
-        await db.execute("""CREATE TABLE IF NOT EXISTS tasks
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS tasks
                          (task_id TEXT PRIMARY KEY,
                           workflow_id TEXT,
                           description TEXT,
@@ -166,35 +182,43 @@ class DatabaseManager:
                           assigned_agent TEXT,
                           result TEXT,
                           created_at TIMESTAMP,
-                          completed_at TIMESTAMP)""")
+                          completed_at TIMESTAMP)"""
+        )
 
         # Metrics table
-        await db.execute("""CREATE TABLE IF NOT EXISTS metrics
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS metrics
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           agent_id TEXT,
                           metric_name TEXT,
                           metric_value REAL,
-                          timestamp TIMESTAMP)""")
+                          timestamp TIMESTAMP)"""
+        )
 
         # Chat sessions table
-        await db.execute("""CREATE TABLE IF NOT EXISTS chat_sessions
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS chat_sessions
                          (session_id TEXT PRIMARY KEY,
                           created_at TIMESTAMP,
                           last_active TIMESTAMP,
-                          metadata TEXT)""")
+                          metadata TEXT)"""
+        )
 
         # Chat messages table
-        await db.execute("""CREATE TABLE IF NOT EXISTS chat_messages
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS chat_messages
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           message_id TEXT,
                           session_id TEXT,
                           role TEXT,
                           content TEXT,
                           timestamp TIMESTAMP,
-                          FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id))""")
+                          FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id))"""
+        )
 
         # Knowledge items table
-        await db.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS knowledge_items
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           title TEXT,
                           content TEXT,
@@ -204,46 +228,56 @@ class DatabaseManager:
                           embedding BLOB,
                           metadata TEXT,
                           created_at TIMESTAMP,
-                          updated_at TIMESTAMP)""")
+                          updated_at TIMESTAMP)"""
+        )
 
         # Learning patterns table
-        await db.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS learning_patterns
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           pattern_type TEXT,
                           pattern_data TEXT,
                           frequency INTEGER,
                           success_rate REAL,
-                          last_seen TIMESTAMP)""")
+                          last_seen TIMESTAMP)"""
+        )
 
         # Learning metadata table
-        await db.execute("""CREATE TABLE IF NOT EXISTS learning_metadata
+        await db.execute(
+            """CREATE TABLE IF NOT EXISTS learning_metadata
                          (key TEXT PRIMARY KEY,
                           value TEXT,
-                          updated_at TIMESTAMP)""")
+                          updated_at TIMESTAMP)"""
+        )
 
         await db.commit()
 
     def _create_tables_sync(self, c):
         """Create tables synchronously"""
         # Agents table
-        c.execute("""CREATE TABLE IF NOT EXISTS agents
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS agents
                      (agent_id TEXT PRIMARY KEY,
                       config TEXT,
                       state TEXT,
                       reliability_score REAL,
-                      last_updated TIMESTAMP)""")
+                      last_updated TIMESTAMP)"""
+        )
 
         # Workflows table
-        c.execute("""CREATE TABLE IF NOT EXISTS workflows
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS workflows
                      (workflow_id TEXT PRIMARY KEY,
                       name TEXT,
                       status TEXT,
                       priority TEXT,
                       created_at TIMESTAMP,
-                      completed_at TIMESTAMP)""")
+                      completed_at TIMESTAMP)"""
+        )
 
         # Tasks table
-        c.execute("""CREATE TABLE IF NOT EXISTS tasks
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS tasks
                      (task_id TEXT PRIMARY KEY,
                       workflow_id TEXT,
                       description TEXT,
@@ -251,35 +285,43 @@ class DatabaseManager:
                       assigned_agent TEXT,
                       result TEXT,
                       created_at TIMESTAMP,
-                      completed_at TIMESTAMP)""")
+                      completed_at TIMESTAMP)"""
+        )
 
         # Metrics table
-        c.execute("""CREATE TABLE IF NOT EXISTS metrics
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS metrics
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       agent_id TEXT,
                       metric_name TEXT,
                       metric_value REAL,
-                      timestamp TIMESTAMP)""")
+                      timestamp TIMESTAMP)"""
+        )
 
         # Chat sessions table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_sessions
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS chat_sessions
                      (session_id TEXT PRIMARY KEY,
                       created_at TIMESTAMP,
                       last_activity TIMESTAMP,
-                      metadata TEXT)""")
+                      metadata TEXT)"""
+        )
 
         # Chat messages table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS chat_messages
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       message_id TEXT,
                       session_id TEXT,
                       role TEXT,
                       content TEXT,
                       timestamp TIMESTAMP,
-                      FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id))""")
+                      FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id))"""
+        )
 
         # Knowledge items table
-        c.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS knowledge_items
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       title TEXT,
                       content TEXT,
@@ -289,22 +331,27 @@ class DatabaseManager:
                       embedding BLOB,
                       metadata TEXT,
                       created_at TIMESTAMP,
-                      updated_at TIMESTAMP)""")
+                      updated_at TIMESTAMP)"""
+        )
 
         # Learning patterns table
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS learning_patterns
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       pattern_type TEXT,
                       pattern_data TEXT,
                       frequency INTEGER,
                       success_rate REAL,
-                      last_seen TIMESTAMP)""")
+                      last_seen TIMESTAMP)"""
+        )
 
         # Learning metadata table
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_metadata
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS learning_metadata
                      (key TEXT PRIMARY KEY,
                       value TEXT,
-                      updated_at TIMESTAMP)""")
+                      updated_at TIMESTAMP)"""
+        )
 
     def _init_db(self):
         """Initialize database schema (deprecated - use _init_db_async)"""
@@ -312,23 +359,28 @@ class DatabaseManager:
         self._init_db_sync()
 
         # Agents table
-        c.execute("""CREATE TABLE IF NOT EXISTS agents
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS agents
                      (agent_id TEXT PRIMARY KEY,
                       config TEXT,
                       state TEXT,
                       reliability_score REAL,
-                      last_updated TIMESTAMP)""")
+                      last_updated TIMESTAMP)"""
+        )
 
         # Workflows table
-        c.execute("""CREATE TABLE IF NOT EXISTS workflows
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS workflows
                      (workflow_id TEXT PRIMARY KEY,
                       name TEXT,
                       status TEXT,
                       priority TEXT,
-                      created_at TIMESTAMP)""")
+                      created_at TIMESTAMP)"""
+        )
 
         # Tasks table
-        c.execute("""CREATE TABLE IF NOT EXISTS tasks
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS tasks
                      (task_id TEXT PRIMARY KEY,
                       workflow_id TEXT,
                       description TEXT,
@@ -337,18 +389,22 @@ class DatabaseManager:
                       result TEXT,
                       created_at TIMESTAMP,
                       completed_at TIMESTAMP,
-                      FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id))""")
+                      FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id))"""
+        )
 
         # Metrics table
-        c.execute("""CREATE TABLE IF NOT EXISTS metrics
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS metrics
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       agent_id TEXT,
                       metric_type TEXT,
                       value REAL,
-                      timestamp TIMESTAMP)""")
+                      timestamp TIMESTAMP)"""
+        )
 
         # Learning patterns table (for recursive_learning.py)
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS learning_patterns
                      (pattern_id TEXT PRIMARY KEY,
                       pattern_type TEXT,
                       conditions TEXT,
@@ -358,32 +414,40 @@ class DatabaseManager:
                       usage_count INTEGER DEFAULT 0,
                       success_count INTEGER DEFAULT 0,
                       last_used TIMESTAMP,
-                      created_at TIMESTAMP)""")
+                      created_at TIMESTAMP)"""
+        )
 
         # Learning metadata table
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_metadata
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS learning_metadata
                      (key TEXT PRIMARY KEY,
                       value TEXT,
-                      updated_at TIMESTAMP)""")
+                      updated_at TIMESTAMP)"""
+        )
 
         # Chat sessions table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_sessions
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS chat_sessions
                      (session_id TEXT PRIMARY KEY,
                       created_at TIMESTAMP,
-                      last_active TIMESTAMP)""")
+                      last_active TIMESTAMP)"""
+        )
 
         # Chat messages table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS chat_messages
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       session_id TEXT,
                       message_id TEXT UNIQUE,
                       role TEXT,
                       content TEXT,
                       timestamp TIMESTAMP,
-                      FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id))""")
+                      FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id))"""
+        )
 
         # Knowledge items table
-        c.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS knowledge_items
                      (id TEXT PRIMARY KEY,
                       title TEXT,
                       content TEXT,
@@ -391,7 +455,8 @@ class DatabaseManager:
                       tags TEXT,
                       summary TEXT,
                       created_at TIMESTAMP,
-                      updated_at TIMESTAMP)""")
+                      updated_at TIMESTAMP)"""
+        )
 
         # Create Indices
         c.execute(
@@ -465,6 +530,7 @@ class DatabaseManager:
 
     def _execute_write(self, sql: str, params: tuple):
         """Execute a sync write operation"""
+        self._ensure_sync_init()
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(sql, params)
@@ -841,9 +907,11 @@ class DatabaseManager:
                         {
                             "pattern_id": row["pattern_id"],
                             "pattern_type": row["pattern_type"],
-                            "conditions": json.loads(row["conditions"])
-                            if row["conditions"]
-                            else [],
+                            "conditions": (
+                                json.loads(row["conditions"])
+                                if row["conditions"]
+                                else []
+                            ),
                             "action": row["action"],
                             "expected_outcome": row["expected_outcome"],
                             "confidence": row["confidence"],

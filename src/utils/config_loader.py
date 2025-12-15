@@ -2,6 +2,7 @@
 Configuration Management for Autonomous Agent Ecosystem
 Updated by C0Di3 to support Declarative Workflows and Templating.
 """
+
 import os
 import yaml
 import json
@@ -13,22 +14,26 @@ from dataclasses import dataclass
 import logging
 
 # Import Core Definitions for Factory Generation
-from core.engine import Workflow, Task, WorkflowPriority
+from src.core.engine import Workflow, Task, WorkflowPriority
 
 logger = logging.getLogger("ConfigLoader")
+
 
 @dataclass
 class SystemConfig:
     """Global system configuration"""
+
     environment: str = "production"
     log_level: str = "INFO"
     database_path: str = "ecosystem.db"
     max_concurrent_workflows: int = 10
     enable_monitoring: bool = True
 
+
 @dataclass
 class LLMConfig:
     """LLM Provider Configuration"""
+
     provider: str = "openai"
     model_name: str = "gpt-3.5-turbo"
     api_key: Optional[str] = None
@@ -36,11 +41,17 @@ class LLMConfig:
     timeout: int = 60
     max_retries: int = 3
 
+
 class ConfigLoader:
     """Load and manage configuration from files and environment variables"""
 
     def __init__(self, config_dir: str = "config"):
-        self.config_dir = config_dir
+        self.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        self.config_dir = (
+            config_dir
+            if os.path.isabs(config_dir)
+            else os.path.join(self.repo_root, config_dir)
+        )
         self.system_config = SystemConfig()
         self.llm_config = LLMConfig()
         self.agent_configs: Dict[str, Any] = {}
@@ -56,7 +67,7 @@ class ConfigLoader:
             "system": self.system_config,
             "llm": self.llm_config,
             "agents": self.agent_configs,
-            "workflows": self.workflow_templates
+            "workflows": self.workflow_templates,
         }
 
     def _load_system_config(self):
@@ -64,22 +75,28 @@ class ConfigLoader:
         config_path = os.path.join(self.config_dir, "system_config.yaml")
         if os.path.exists(config_path):
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     data = yaml.safe_load(f)
                     if data:
                         # Update system config
-                        sys_data = data.get('system', {})
-                        self.system_config = SystemConfig(**{
-                            k: v for k, v in sys_data.items()
-                            if k in self.system_config.__dict__
-                        })
+                        sys_data = data.get("system", {})
+                        self.system_config = SystemConfig(
+                            **{
+                                k: v
+                                for k, v in sys_data.items()
+                                if k in self.system_config.__dict__
+                            }
+                        )
 
                         # Update LLM config
-                        llm_data = data.get('llm', {})
-                        self.llm_config = LLMConfig(**{
-                            k: v for k, v in llm_data.items()
-                            if k in self.llm_config.__dict__
-                        })
+                        llm_data = data.get("llm", {})
+                        self.llm_config = LLMConfig(
+                            **{
+                                k: v
+                                for k, v in llm_data.items()
+                                if k in self.llm_config.__dict__
+                            }
+                        )
             except Exception as e:
                 logger.error(f"Failed to load system config: {e}")
 
@@ -88,12 +105,20 @@ class ConfigLoader:
         if os.getenv("LLM_PROVIDER"):
             self.llm_config.provider = os.getenv("LLM_PROVIDER")
 
+    def _resolve_config_path(self, file_path: str) -> str:
+        """Resolve a file path relative to the repository config directory."""
+
+        if os.path.isabs(file_path):
+            return file_path
+
+        return os.path.join(self.config_dir, file_path)
+
     def _load_agent_configs(self):
         """Load individual agent configurations"""
         agents_path = os.path.join(self.config_dir, "agents.yaml")
         if os.path.exists(agents_path):
             try:
-                with open(agents_path, 'r') as f:
+                with open(agents_path, "r") as f:
                     self.agent_configs = yaml.safe_load(f) or {}
             except Exception as e:
                 logger.error(f"Failed to load agent configs: {e}")
@@ -103,7 +128,7 @@ class ConfigLoader:
         workflows_path = os.path.join(self.config_dir, "workflows.yaml")
         if os.path.exists(workflows_path):
             try:
-                with open(workflows_path, 'r') as f:
+                with open(workflows_path, "r") as f:
                     data = yaml.safe_load(f) or {}
                     self.workflow_templates = data.get("workflows", {})
                 logger.info(f"Loaded {len(self.workflow_templates)} workflow templates")
@@ -117,9 +142,42 @@ class ConfigLoader:
         self._load_agent_configs()
         return self.agent_configs
 
+    def load_workflows(self, workflow_path: Optional[str] = None) -> Dict[str, Any]:
+        """Load sample workflows with support for CLI and environment overrides."""
+
+        override_path = workflow_path or os.getenv("SAMPLE_WORKFLOWS") or os.getenv(
+            "WORKFLOWS_FILE"
+        )
+        resolved_path = self._resolve_config_path(override_path or "simple_test.yaml")
+
+        if not os.path.exists(resolved_path):
+            logger.warning(
+                "No workflow file found; expected at %s. Skipping sample workflows.",
+                resolved_path,
+            )
+            return {}
+
+        try:
+            with open(resolved_path, "r") as file:
+                data = yaml.safe_load(file) or {}
+                if not isinstance(data, dict):
+                    logger.error(
+                        "Workflow file %s is not a mapping. Unable to load workflows.",
+                        resolved_path,
+                    )
+                    return {}
+
+                logger.info("Loaded workflows from %s", resolved_path)
+                return data
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Failed to load workflows from %s: %s", resolved_path, exc)
+            return {}
+
     # --- Factory Method for Agentic Workflow Generation ---
 
-    def create_workflow_from_template(self, template_name: str, variables: Dict[str, str] = None) -> Optional[Workflow]:
+    def create_workflow_from_template(
+        self, template_name: str, variables: Dict[str, str] = None
+    ) -> Optional[Workflow]:
         """
         Instantiates a Workflow object from a YAML template, substituting variables.
 
@@ -180,15 +238,17 @@ class ConfigLoader:
             deps = raw_task.get("dependencies", [])
             global_deps = [f"{workflow_id}_{d}" for d in deps]
 
-            tasks.append(Task(
-                task_id=task_global_id,
-                description=instruction,
-                required_capabilities=capabilities,
-                priority=priority,
-                dependencies=global_deps,
-                payload=payload_template,
-                workflow_id=workflow_id
-            ))
+            tasks.append(
+                Task(
+                    task_id=task_global_id,
+                    description=instruction,
+                    required_capabilities=capabilities,
+                    priority=priority,
+                    dependencies=global_deps,
+                    payload=payload_template,
+                    workflow_id=workflow_id,
+                )
+            )
 
         # 4. Construct Workflow Object
         return Workflow(
@@ -196,5 +256,5 @@ class ConfigLoader:
             name=f"{template_name} ({variables.get('query', 'Custom')})",
             tasks=tasks,
             priority=priority,
-            cost_budget=template.get("budget", 100.0)
+            cost_budget=template.get("budget", 100.0),
         )

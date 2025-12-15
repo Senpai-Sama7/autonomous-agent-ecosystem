@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any
-from agents.base_agent import AgentContext
+from src.agents.base_agent import AgentContext
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +26,14 @@ class AgentToolkit:
             available_resources={},
             other_agents=[],
             active_workflows=[],
-            incentive_pool=0
+            incentive_pool=0,
         )
 
         result = await self.agents["git_agent_001"].execute_task(task, context)
         return {
             "success": result.success,
             "data": result.result_data,
-            "error": result.error_message
+            "error": result.error_message,
         }
 
     async def run_test(self, command: str, target_file: str = None) -> Dict[str, Any]:
@@ -46,14 +46,14 @@ class AgentToolkit:
             available_resources={},
             other_agents=[],
             active_workflows=[],
-            incentive_pool=0
+            incentive_pool=0,
         )
 
         result = await self.agents["test_agent_001"].execute_task(task, context)
         return {
             "success": result.success,
             "data": result.result_data,
-            "error": result.error_message
+            "error": result.error_message,
         }
 
     async def code_analysis(self, tool: str, path: str) -> Dict[str, Any]:
@@ -66,17 +66,19 @@ class AgentToolkit:
             available_resources={},
             other_agents=[],
             active_workflows=[],
-            incentive_pool=0
+            incentive_pool=0,
         )
 
         result = await self.agents["analysis_agent_001"].execute_task(task, context)
         return {
             "success": result.success,
             "data": result.result_data,
-            "error": result.error_message
+            "error": result.error_message,
         }
 
-    async def knowledge_manager(self, action: str, key: str, content: str = None) -> Dict[str, Any]:
+    async def knowledge_manager(
+        self, action: str, key: str, content: str = None
+    ) -> Dict[str, Any]:
         """Manage semantic memory."""
         task = {"action": action, "key": key, "content": content}
         context = AgentContext(
@@ -86,12 +88,12 @@ class AgentToolkit:
             available_resources={},
             other_agents=[],
             active_workflows=[],
-            incentive_pool=0
+            incentive_pool=0,
         )
 
         result = await self.agents["knowledge_agent_001"].execute_task(task, context)
         return {
             "success": result.success,
             "data": result.result_data,
-            "error": result.error_message
+            "error": result.error_message,
         }

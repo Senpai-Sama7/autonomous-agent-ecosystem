@@ -6,15 +6,19 @@ REFACTORED: Async implementation to prevent event loop blocking.
 - Replaced time.sleep with asyncio.sleep for rate limiting
 - Wrapped blocking DDGS search in asyncio.to_thread
 """
+
 import asyncio
 import time
 from typing import Dict, Any, List, Optional
+
 # Use new ddgs package with fallback to duckduckgo_search
 try:
     from ddgs import DDGS
+
     DDGS_NEW_API = True
 except ImportError:
     from duckduckgo_search import DDGS
+
     DDGS_NEW_API = False
 import aiohttp
 from bs4 import BeautifulSoup
@@ -25,29 +29,36 @@ from src.utils.structured_logger import get_logger, log_performance
 
 logger = get_logger("ResearchAgent")
 
+
 class ResearchAgent(BaseAgent):
     def __init__(self, agent_id: str, config: Dict[str, Any]):
         super().__init__(agent_id, [AgentCapability.DATA_PROCESSING], config)
-        self.max_results = config.get('max_search_results', 5)
-        self.max_scrape_results = config.get('max_scrape_results', 3)  # Configurable scrape limit
+        self.max_results = config.get("max_search_results", 5)
+        self.max_scrape_results = config.get(
+            "max_scrape_results", 3
+        )  # Configurable scrape limit
 
         # Rate limiting with lock for thread safety
-        self.min_request_interval = config.get('min_request_interval', 1.0)  # seconds between requests
+        self.min_request_interval = config.get(
+            "min_request_interval", 1.0
+        )  # seconds between requests
         self.last_request_time = 0
         self._rate_limit_lock = asyncio.Lock()
 
         # Simple in-memory cache with size limit
         self.cache: Dict[str, tuple] = {}
-        self.cache_ttl = config.get('cache_ttl', 3600)  # 1 hour default
-        self.max_cache_size = config.get('max_cache_size', 1000)  # Prevent memory leak
+        self.cache_ttl = config.get("cache_ttl", 3600)  # 1 hour default
+        self.max_cache_size = config.get("max_cache_size", 1000)  # Prevent memory leak
 
         # SSL verification (disable for testing only)
-        self.verify_ssl = config.get('verify_ssl', True)
+        self.verify_ssl = config.get("verify_ssl", True)
 
-    async def execute_task(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
+    async def execute_task(
+        self, task: Dict[str, Any], context: AgentContext
+    ) -> TaskResult:
         try:
             self.state = AgentState.BUSY
-            query = task.get('payload', {}).get('query') or task.get('description')
+            query = task.get("payload", {}).get("query") or task.get("description")
 
             if not query:
                 return TaskResult(success=False, error_message="No query provided")
@@ -60,25 +71,38 @@ class ResearchAgent(BaseAgent):
             # 2. Content Extraction (Async HTTP with aiohttp)
             detailed_results = []
             # Filter results that have valid URLs
-            valid_results = [res for res in results if res.get('href')]
-            scrape_targets = valid_results[:self.max_scrape_results]
+            valid_results = [res for res in results if res.get("href")]
+            scrape_targets = valid_results[: self.max_scrape_results]
 
             if scrape_targets:
                 connector = aiohttp.TCPConnector(ssl=self.verify_ssl)
                 async with aiohttp.ClientSession(connector=connector) as session:
                     # Gather scraping tasks concurrently
-                    scrape_tasks = [self._scrape_content_async(session, res['href']) for res in scrape_targets]
-                    contents = await asyncio.gather(*scrape_tasks, return_exceptions=True)
+                    scrape_tasks = [
+                        self._scrape_content_async(session, res["href"])
+                        for res in scrape_targets
+                    ]
+                    contents = await asyncio.gather(
+                        *scrape_tasks, return_exceptions=True
+                    )
 
                     for res, content in zip(scrape_targets, contents):
                         if isinstance(content, Exception):
-                            logger.debug(f"Scrape failed for {res.get('href')}: {content}")
-                            detailed_results.append(res)  # Include result without full_content
+                            logger.debug(
+                                f"Scrape failed for {res.get('href')}: {content}"
+                            )
+                            detailed_results.append(
+                                res
+                            )  # Include result without full_content
                         elif content:  # Non-empty string
-                            res['full_content'] = content[:2000]  # Truncate for context window
+                            res["full_content"] = content[
+                                :2000
+                            ]  # Truncate for context window
                             detailed_results.append(res)
                         else:
-                            detailed_results.append(res)  # Include result without full_content
+                            detailed_results.append(
+                                res
+                            )  # Include result without full_content
 
             # 3. Synthesis (Simple aggregation for now, could use LLM if configured)
             summary = self._synthesize_results(detailed_results)
@@ -86,11 +110,11 @@ class ResearchAgent(BaseAgent):
             return TaskResult(
                 success=True,
                 result_data={
-                    'summary': summary,
-                    'sources': detailed_results,
-                    'raw_search_results': results
+                    "summary": summary,
+                    "sources": detailed_results,
+                    "raw_search_results": results,
                 },
-                execution_time=0.0  # Calculated by caller
+                execution_time=0.0,  # Calculated by caller
             )
 
         except Exception as e:
@@ -123,7 +147,9 @@ class ResearchAgent(BaseAgent):
             logger.error(f"Search API error: {e}")
             return []
 
-    async def _scrape_content_async(self, session: aiohttp.ClientSession, url: str) -> str:
+    async def _scrape_content_async(
+        self, session: aiohttp.ClientSession, url: str
+    ) -> str:
         """Async scrape text content from URL with caching"""
         # Check cache
         cache_key = f"scrape:{url}"
@@ -139,7 +165,7 @@ class ResearchAgent(BaseAgent):
             async with session.get(
                 url,
                 timeout=timeout,
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; ResearchAgent/1.0)'}
+                headers={"User-Agent": "Mozilla/5.0 (compatible; ResearchAgent/1.0)"},
             ) as response:
                 if response.status != 200:
                     logger.warning(f"HTTP {response.status} for {url}")
@@ -161,7 +187,7 @@ class ResearchAgent(BaseAgent):
 
     def _parse_html(self, html: str) -> str:
         """Parse HTML and extract clean text (CPU-bound, runs in thread)"""
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
         # Remove script and style elements
         for script in soup(["script", "style"]):
@@ -171,7 +197,7 @@ class ResearchAgent(BaseAgent):
         # Clean up whitespace
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        return ' '.join(chunk for chunk in chunks if chunk)
+        return " ".join(chunk for chunk in chunks if chunk)
 
     async def _apply_rate_limit_async(self):
         """Apply async rate limiting between requests (non-blocking, thread-safe)"""

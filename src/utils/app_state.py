@@ -1,10 +1,12 @@
 """
 App State Manager - Handles first-run detection, user preferences, and app state
 """
+
 import os
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
+
 
 class AppState:
     """Manage application state and user preferences"""
@@ -36,7 +38,7 @@ class AppState:
         try:
             self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             if self.CONFIG_FILE.exists():
-                with open(self.CONFIG_FILE, 'r') as f:
+                with open(self.CONFIG_FILE, "r") as f:
                     self._state = {**self.DEFAULT_STATE, **json.load(f)}
             else:
                 self._state = self.DEFAULT_STATE.copy()
@@ -48,7 +50,7 @@ class AppState:
         """Save state to file"""
         try:
             self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            with open(self.CONFIG_FILE, 'w') as f:
+            with open(self.CONFIG_FILE, "w") as f:
                 json.dump(self._state, f, indent=2)
         except Exception:
             pass

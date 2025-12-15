@@ -17,4 +17,4 @@ from .middleware import (
     get_allowed_origins,
 )
 
-__all__ = ['create_app', 'run_server', 'add_security_middleware', 'security_config']
+__all__ = ["create_app", "run_server", "add_security_middleware", "security_config"]

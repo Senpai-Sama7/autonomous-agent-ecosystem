@@ -2,6 +2,7 @@
 MCP (Model Context Protocol) Integration Module
 Enterprise-grade implementation for tool and resource access via MCP servers.
 """
+
 import asyncio
 import json
 import logging
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MCPMessageType(Enum):
     """MCP message types per protocol spec"""
+
     REQUEST = "request"
     RESPONSE = "response"
     NOTIFICATION = "notification"
@@ -27,6 +29,7 @@ class MCPMessageType(Enum):
 @dataclass
 class MCPTool:
     """Represents an MCP tool definition"""
+
     name: str
     description: str
     input_schema: Dict[str, Any]
@@ -37,13 +40,14 @@ class MCPTool:
             "name": self.name,
             "description": self.description,
             "inputSchema": self.input_schema,
-            "serverName": self.server_name
+            "serverName": self.server_name,
         }
 
 
 @dataclass
 class MCPResource:
     """Represents an MCP resource"""
+
     uri: str
     name: str
     description: str
@@ -54,6 +58,7 @@ class MCPResource:
 @dataclass
 class MCPServerConfig:
     """Configuration for an MCP server"""
+
     name: str
     transport: str  # "stdio" | "http" | "websocket"
     command: Optional[str] = None  # For stdio transport
@@ -96,16 +101,18 @@ class HTTPTransport(MCPTransport):
         try:
             self._session = aiohttp.ClientSession(headers=self.headers)
             # Test connection with initialize
-            response = await self.send({
-                "jsonrpc": "2.0",
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "ASTRO", "version": "1.0.0"}
-                },
-                "id": 1
-            })
+            response = await self.send(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "ASTRO", "version": "1.0.0"},
+                    },
+                    "id": 1,
+                }
+            )
             self._connected = "result" in response
             return self._connected
         except Exception as e:
@@ -146,8 +153,12 @@ class MCPClient:
             if self.config.transport == "http":
                 self.transport = HTTPTransport(self.config.url)
             else:
-                logger.warning(f"Transport {self.config.transport} not fully implemented, using HTTP")
-                self.transport = HTTPTransport(self.config.url or "http://localhost:3000")
+                logger.warning(
+                    f"Transport {self.config.transport} not fully implemented, using HTTP"
+                )
+                self.transport = HTTPTransport(
+                    self.config.url or "http://localhost:3000"
+                )
 
             if await self.transport.connect():
                 await self._discover_capabilities()
@@ -175,7 +186,7 @@ class MCPClient:
                     name=tool["name"],
                     description=tool.get("description", ""),
                     input_schema=tool.get("inputSchema", {}),
-                    server_name=self.config.name
+                    server_name=self.config.name,
                 )
                 self._tools[tool["name"]] = mcp_tool
 
@@ -188,18 +199,20 @@ class MCPClient:
                     name=resource.get("name", ""),
                     description=resource.get("description", ""),
                     mime_type=resource.get("mimeType", "text/plain"),
-                    server_name=self.config.name
+                    server_name=self.config.name,
                 )
                 self._resources[resource["uri"]] = mcp_resource
 
-    async def _send_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _send_request(
+        self, method: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Send JSON-RPC request to server"""
         self._request_id += 1
         message = {
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
-            "id": self._request_id
+            "id": self._request_id,
         }
         return await self.transport.send(message)
 
@@ -208,10 +221,9 @@ class MCPClient:
         if tool_name not in self._tools:
             raise ValueError(f"Unknown tool: {tool_name}")
 
-        response = await self._send_request("tools/call", {
-            "name": tool_name,
-            "arguments": arguments
-        })
+        response = await self._send_request(
+            "tools/call", {"name": tool_name, "arguments": arguments}
+        )
 
         if "error" in response:
             raise RuntimeError(f"Tool execution failed: {response['error']}")
@@ -254,7 +266,9 @@ class MCPRegistry:
             # Index tools by name
             for tool in client.get_tools():
                 self._tool_index[tool.name] = config.name
-            logger.info(f"Registered MCP server: {config.name} with {len(client.get_tools())} tools")
+            logger.info(
+                f"Registered MCP server: {config.name} with {len(client.get_tools())} tools"
+            )
             return True
         return False
 
@@ -302,8 +316,9 @@ class MCPToolExecutor:
         self.max_retries = max_retries
         self._execution_history: List[Dict[str, Any]] = []
 
-    async def execute(self, tool_name: str, arguments: Dict[str, Any],
-                      timeout: float = 30.0) -> Dict[str, Any]:
+    async def execute(
+        self, tool_name: str, arguments: Dict[str, Any], timeout: float = 30.0
+    ) -> Dict[str, Any]:
         """Execute a tool with retry logic"""
         execution_id = hashlib.md5(
             f"{tool_name}{json.dumps(arguments)}{datetime.now().isoformat()}".encode()
@@ -317,15 +332,14 @@ class MCPToolExecutor:
             "result": None,
             "error": None,
             "attempts": 0,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         for attempt in range(self.max_retries):
             result["attempts"] = attempt + 1
             try:
                 tool_result = await asyncio.wait_for(
-                    self.registry.call_tool(tool_name, arguments),
-                    timeout=timeout
+                    self.registry.call_tool(tool_name, arguments), timeout=timeout
                 )
                 result["status"] = "success"
                 result["result"] = tool_result
@@ -338,7 +352,7 @@ class MCPToolExecutor:
                 result["status"] = "error"
 
             if attempt < self.max_retries - 1:
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await asyncio.sleep(2**attempt)  # Exponential backoff
 
         self._execution_history.append(result)
         return result
@@ -360,7 +374,7 @@ async def create_mcp_registry(configs: List[Dict[str, Any]]) -> MCPRegistry:
             command=config_dict.get("command"),
             args=config_dict.get("args", []),
             env=config_dict.get("env", {}),
-            capabilities=config_dict.get("capabilities", [])
+            capabilities=config_dict.get("capabilities", []),
         )
         await registry.register_server(config)
 

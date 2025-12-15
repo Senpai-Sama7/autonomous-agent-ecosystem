@@ -2,12 +2,12 @@
 
 import logging
 from typing import Dict, Any
-from agents.git_agent import GitAgent
-from agents.test_agent import TestAgent
-from agents.analysis_agent import AnalysisAgent
-from agents.knowledge_agent import KnowledgeAgent
-from agents.base_agent import AgentCapability
-from core.engine import AgentConfig
+from src.agents.analysis_agent import AnalysisAgent
+from src.agents.base_agent import AgentCapability
+from src.agents.git_agent import GitAgent
+from src.agents.knowledge_agent import KnowledgeAgent
+from src.agents.test_agent import TestAgent
+from src.core.engine import AgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,9 @@ async def initialize_agents(engine: Any) -> Dict[str, Any]:
     logger.info("✅ Analysis Agent registered")
 
     # Knowledge Agent
-    knowledge_agent = KnowledgeAgent("knowledge_agent_001", {"knowledge_dir": "./workspace/knowledge"})
+    knowledge_agent = KnowledgeAgent(
+        "knowledge_agent_001", {"knowledge_dir": "./workspace/knowledge"}
+    )
     knowledge_config = AgentConfig(
         agent_id="knowledge_agent_001",
         capabilities=["memory_management", "context_persistence"],

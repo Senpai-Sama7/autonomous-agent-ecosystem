@@ -2,6 +2,7 @@
 Self-Healing System
 Enterprise-grade fault detection, automatic recovery, and resilience patterns.
 """
+
 import asyncio
 import logging
 import time
@@ -18,11 +19,12 @@ import hashlib
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class HealthStatus(Enum):
     """Component health status"""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -32,6 +34,7 @@ class HealthStatus(Enum):
 
 class FailureType(Enum):
     """Types of failures"""
+
     TIMEOUT = "timeout"
     EXCEPTION = "exception"
     RESOURCE_EXHAUSTION = "resource_exhaustion"
@@ -44,6 +47,7 @@ class FailureType(Enum):
 
 class RecoveryStrategy(Enum):
     """Recovery strategies"""
+
     RETRY = "retry"
     RESTART = "restart"
     FAILOVER = "failover"
@@ -56,6 +60,7 @@ class RecoveryStrategy(Enum):
 @dataclass
 class HealthCheck:
     """Health check result"""
+
     component_id: str
     status: HealthStatus
     latency_ms: float
@@ -67,6 +72,7 @@ class HealthCheck:
 @dataclass
 class Failure:
     """Failure record"""
+
     failure_id: str
     component_id: str
     failure_type: FailureType
@@ -82,6 +88,7 @@ class Failure:
 @dataclass
 class CircuitBreakerState:
     """Circuit breaker state"""
+
     failures: int = 0
     successes: int = 0
     last_failure_time: Optional[float] = None
@@ -92,11 +99,13 @@ class CircuitBreakerState:
 class CircuitBreaker:
     """Circuit breaker pattern implementation"""
 
-    def __init__(self,
-                 failure_threshold: int = 5,
-                 success_threshold: int = 3,
-                 timeout_seconds: float = 30.0,
-                 half_open_max_calls: int = 3):
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        success_threshold: int = 3,
+        timeout_seconds: float = 30.0,
+        half_open_max_calls: int = 3,
+    ):
         self.failure_threshold = failure_threshold
         self.success_threshold = success_threshold
         self.timeout_seconds = timeout_seconds
@@ -141,7 +150,9 @@ class CircuitBreaker:
         """Trip the circuit breaker"""
         self._state.state = "open"
         self._state.next_retry_time = time.time() + self.timeout_seconds
-        logger.warning(f"Circuit breaker tripped. Will retry at {self._state.next_retry_time}")
+        logger.warning(
+            f"Circuit breaker tripped. Will retry at {self._state.next_retry_time}"
+        )
 
     def _reset(self):
         """Reset the circuit breaker"""
@@ -160,12 +171,14 @@ class CircuitBreaker:
 class RetryPolicy:
     """Configurable retry policy with exponential backoff"""
 
-    def __init__(self,
-                 max_retries: int = 3,
-                 base_delay: float = 1.0,
-                 max_delay: float = 60.0,
-                 exponential_base: float = 2.0,
-                 jitter: bool = True):
+    def __init__(
+        self,
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+        max_delay: float = 60.0,
+        exponential_base: float = 2.0,
+        jitter: bool = True,
+    ):
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -174,19 +187,16 @@ class RetryPolicy:
 
     def get_delay(self, attempt: int) -> float:
         """Calculate delay for retry attempt"""
-        delay = min(
-            self.base_delay * (self.exponential_base ** attempt),
-            self.max_delay
-        )
+        delay = min(self.base_delay * (self.exponential_base**attempt), self.max_delay)
         if self.jitter:
             import random
-            delay *= (0.5 + random.random())
+
+            delay *= 0.5 + random.random()
         return delay
 
-    async def execute_with_retry(self,
-                                  func: Callable,
-                                  *args,
-                                  **kwargs) -> Tuple[bool, Any, List[Exception]]:
+    async def execute_with_retry(
+        self, func: Callable, *args, **kwargs
+    ) -> Tuple[bool, Any, List[Exception]]:
         """Execute function with retry logic"""
         exceptions = []
 
@@ -201,7 +211,9 @@ class RetryPolicy:
                 exceptions.append(e)
                 if attempt < self.max_retries:
                     delay = self.get_delay(attempt)
-                    logger.warning(f"Retry {attempt + 1}/{self.max_retries} after {delay:.2f}s: {e}")
+                    logger.warning(
+                        f"Retry {attempt + 1}/{self.max_retries} after {delay:.2f}s: {e}"
+                    )
                     await asyncio.sleep(delay)
 
         return False, None, exceptions
@@ -210,11 +222,13 @@ class RetryPolicy:
 class HealthMonitor:
     """Monitors component health and detects anomalies"""
 
-    def __init__(self,
-                 check_interval: float = 10.0,
-                 history_size: int = 100,
-                 degraded_threshold: float = 0.7,
-                 unhealthy_threshold: float = 0.5):
+    def __init__(
+        self,
+        check_interval: float = 10.0,
+        history_size: int = 100,
+        degraded_threshold: float = 0.7,
+        unhealthy_threshold: float = 0.5,
+    ):
         self.check_interval = check_interval
         self.history_size = history_size
         self.degraded_threshold = degraded_threshold
@@ -279,7 +293,7 @@ class HealthMonitor:
                 component_id=component_id,
                 status=status,
                 latency_ms=latency,
-                message="Check passed" if result else "Check failed"
+                message="Check passed" if result else "Check failed",
             )
         except Exception as e:
             latency = (time.time() - start_time) * 1000
@@ -287,7 +301,7 @@ class HealthMonitor:
                 component_id=component_id,
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=latency,
-                message=str(e)
+                message=str(e),
             )
 
     def get_component_health(self, component_id: str) -> HealthStatus:
@@ -301,7 +315,9 @@ class HealthMonitor:
 
         # Calculate success rate from recent checks
         recent = history[-10:] if len(history) >= 10 else history
-        success_rate = sum(1 for h in recent if h.status == HealthStatus.HEALTHY) / len(recent)
+        success_rate = sum(1 for h in recent if h.status == HealthStatus.HEALTHY) / len(
+            recent
+        )
 
         if success_rate >= self.degraded_threshold:
             return HealthStatus.HEALTHY
@@ -324,8 +340,12 @@ class HealthMonitor:
             "max": max(latencies),
             "mean": statistics.mean(latencies),
             "median": statistics.median(latencies),
-            "p95": sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) >= 20 else max(latencies),
-            "stddev": statistics.stdev(latencies) if len(latencies) > 1 else 0
+            "p95": (
+                sorted(latencies)[int(len(latencies) * 0.95)]
+                if len(latencies) >= 20
+                else max(latencies)
+            ),
+            "stddev": statistics.stdev(latencies) if len(latencies) > 1 else 0,
         }
 
 
@@ -375,7 +395,9 @@ class RecoveryManager:
                 self._failure_log.append(failure)
 
                 if success:
-                    logger.info(f"Recovery successful for {failure.component_id} using {strategy.value}")
+                    logger.info(
+                        f"Recovery successful for {failure.component_id} using {strategy.value}"
+                    )
                 else:
                     logger.warning(f"Recovery failed for {failure.component_id}")
 
@@ -397,8 +419,12 @@ class RecoveryManager:
         recovered = 0
 
         for failure in self._failure_log:
-            by_type[failure.failure_type.value] = by_type.get(failure.failure_type.value, 0) + 1
-            by_component[failure.component_id] = by_component.get(failure.component_id, 0) + 1
+            by_type[failure.failure_type.value] = (
+                by_type.get(failure.failure_type.value, 0) + 1
+            )
+            by_component[failure.component_id] = (
+                by_component.get(failure.component_id, 0) + 1
+            )
             if failure.recovered:
                 recovered += 1
 
@@ -407,7 +433,7 @@ class RecoveryManager:
             "recovered": recovered,
             "recovery_rate": recovered / len(self._failure_log),
             "by_type": by_type,
-            "by_component": by_component
+            "by_component": by_component,
         }
 
 
@@ -442,12 +468,14 @@ class SelfHealingSystem:
         await self.health_monitor.stop()
         logger.info("Self-Healing System stopped")
 
-    def register_component(self,
-                           component_id: str,
-                           health_check: Callable,
-                           recovery_callback: Optional[Callable] = None,
-                           circuit_breaker: Optional[CircuitBreaker] = None,
-                           retry_policy: Optional[RetryPolicy] = None):
+    def register_component(
+        self,
+        component_id: str,
+        health_check: Callable,
+        recovery_callback: Optional[Callable] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        retry_policy: Optional[RetryPolicy] = None,
+    ):
         """Register a component for self-healing"""
         self.health_monitor.register_check(component_id, health_check)
 
@@ -490,7 +518,9 @@ class SelfHealingSystem:
 
         retry_policy = self._retry_policies.get(component_id)
         if retry_policy:
-            success, result, exceptions = await retry_policy.execute_with_retry(callback)
+            success, result, exceptions = await retry_policy.execute_with_retry(
+                callback
+            )
 
             if success:
                 if cb:
@@ -501,11 +531,9 @@ class SelfHealingSystem:
                     cb.record_failure()
                 logger.warning(f"Failed to heal component: {component_id}")
 
-    async def execute_with_protection(self,
-                                       component_id: str,
-                                       func: Callable,
-                                       *args,
-                                       **kwargs) -> Tuple[bool, Any]:
+    async def execute_with_protection(
+        self, component_id: str, func: Callable, *args, **kwargs
+    ) -> Tuple[bool, Any]:
         """Execute a function with full self-healing protection"""
         cb = self._circuit_breakers.get(component_id)
 
@@ -535,24 +563,28 @@ class SelfHealingSystem:
             status = self.health_monitor.get_component_health(component_id)
             component_health[component_id] = {
                 "status": status.value,
-                "latency": self.health_monitor.get_latency_stats(component_id)
+                "latency": self.health_monitor.get_latency_stats(component_id),
             }
 
             if status == HealthStatus.UNHEALTHY:
                 overall_status = HealthStatus.UNHEALTHY
-            elif status == HealthStatus.DEGRADED and overall_status == HealthStatus.HEALTHY:
+            elif (
+                status == HealthStatus.DEGRADED
+                and overall_status == HealthStatus.HEALTHY
+            ):
                 overall_status = HealthStatus.DEGRADED
 
         return {
             "overall_status": overall_status.value,
             "components": component_health,
             "failure_stats": self.recovery_manager.get_failure_stats(),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 
 # Singleton instance
 _self_healing: Optional[SelfHealingSystem] = None
+
 
 def get_self_healing_system() -> SelfHealingSystem:
     """Get or create the self-healing system singleton"""

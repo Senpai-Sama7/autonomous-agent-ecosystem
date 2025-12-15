@@ -14,7 +14,9 @@ class AnalysisAgent(BaseAgent):
     def __init__(self, agent_id: str, config: Dict[str, Any]):
         super().__init__(agent_id, [AgentCapability.DATA_PROCESSING], config)
 
-    async def execute_task(self, task: Dict[str, Any], context: AgentContext) -> TaskResult:
+    async def execute_task(
+        self, task: Dict[str, Any], context: AgentContext
+    ) -> TaskResult:
         """Run code analysis."""
         try:
             tool = task.get("tool")
@@ -32,8 +34,8 @@ class AnalysisAgent(BaseAgent):
                     "output": result.stdout,
                     "warnings": result.stderr,
                     "tool": tool,
-                    "path": path
-                }
+                    "path": path,
+                },
             )
         except subprocess.TimeoutExpired:
             return TaskResult(success=False, error_message="Analysis timed out")

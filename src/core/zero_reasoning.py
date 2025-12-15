@@ -19,6 +19,7 @@ capabilities the underlying LLM doesn't already have.
 Reference: Wei et al., "Chain-of-Thought Prompting Elicits Reasoning in Large
 Language Models" (2022)
 """
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -35,16 +36,18 @@ logger = logging.getLogger(__name__)
 
 class ReasoningMode(Enum):
     """Reasoning modes"""
-    DEDUCTIVE = "deductive"       # General to specific
-    INDUCTIVE = "inductive"       # Specific to general
-    ABDUCTIVE = "abductive"       # Best explanation
-    ANALOGICAL = "analogical"     # By comparison
-    CAUSAL = "causal"            # Cause and effect
+
+    DEDUCTIVE = "deductive"  # General to specific
+    INDUCTIVE = "inductive"  # Specific to general
+    ABDUCTIVE = "abductive"  # Best explanation
+    ANALOGICAL = "analogical"  # By comparison
+    CAUSAL = "causal"  # Cause and effect
     COUNTERFACTUAL = "counterfactual"  # What if
 
 
 class ConfidenceLevel(Enum):
     """Confidence levels for conclusions"""
+
     CERTAIN = 1.0
     HIGH = 0.85
     MEDIUM = 0.65
@@ -56,6 +59,7 @@ class ConfidenceLevel(Enum):
 @dataclass
 class Premise:
     """A logical premise"""
+
     premise_id: str
     statement: str
     confidence: float = 1.0
@@ -68,13 +72,14 @@ class Premise:
             "statement": self.statement,
             "confidence": self.confidence,
             "source": self.source,
-            "dependencies": self.dependencies
+            "dependencies": self.dependencies,
         }
 
 
 @dataclass
 class Conclusion:
     """A derived conclusion"""
+
     conclusion_id: str
     statement: str
     confidence: float
@@ -91,13 +96,14 @@ class Conclusion:
             "supportingPremises": self.supporting_premises,
             "reasoningChain": self.reasoning_chain,
             "mode": self.mode.value,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
 
 
 @dataclass
 class ReasoningStep:
     """A single step in reasoning"""
+
     step_id: str
     step_number: int
     thought: str
@@ -110,6 +116,7 @@ class ReasoningStep:
 @dataclass
 class ReasoningTree:
     """Tree structure for tree-of-thought reasoning"""
+
     root_question: str
     branches: List["ReasoningBranch"] = field(default_factory=list)
     best_path: Optional[List[str]] = None
@@ -120,6 +127,7 @@ class ReasoningTree:
 @dataclass
 class ReasoningBranch:
     """A branch in the reasoning tree"""
+
     branch_id: str
     parent_id: Optional[str]
     thought: str
@@ -135,31 +143,37 @@ class KnowledgeBase:
         self._premises: Dict[str, Premise] = {}
         self._conclusions: Dict[str, Conclusion] = {}
         self._axioms: Set[str] = set()
-        self._relations: Dict[str, List[Tuple[str, str]]] = {}  # entity -> [(relation, entity)]
+        self._relations: Dict[str, List[Tuple[str, str]]] = (
+            {}
+        )  # entity -> [(relation, entity)]
 
     def add_axiom(self, statement: str) -> str:
         """Add a fundamental axiom"""
         premise_id = hashlib.md5(statement.encode()).hexdigest()[:12]
         premise = Premise(
-            premise_id=premise_id,
-            statement=statement,
-            confidence=1.0,
-            source="axiom"
+            premise_id=premise_id, statement=statement, confidence=1.0, source="axiom"
         )
         self._premises[premise_id] = premise
         self._axioms.add(premise_id)
         return premise_id
 
-    def add_premise(self, statement: str, confidence: float = 1.0,
-                    source: str = "derived", dependencies: List[str] = None) -> str:
+    def add_premise(
+        self,
+        statement: str,
+        confidence: float = 1.0,
+        source: str = "derived",
+        dependencies: List[str] = None,
+    ) -> str:
         """Add a premise to the knowledge base"""
-        premise_id = hashlib.md5(f"{statement}{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+        premise_id = hashlib.md5(
+            f"{statement}{datetime.now().isoformat()}".encode()
+        ).hexdigest()[:12]
         premise = Premise(
             premise_id=premise_id,
             statement=statement,
             confidence=confidence,
             source=source,
-            dependencies=dependencies or []
+            dependencies=dependencies or [],
         )
         self._premises[premise_id] = premise
         return premise_id
@@ -176,7 +190,9 @@ class KnowledgeBase:
     def get_all_premises(self) -> List[Premise]:
         return list(self._premises.values())
 
-    def find_related(self, entity: str, relation: Optional[str] = None) -> List[Tuple[str, str]]:
+    def find_related(
+        self, entity: str, relation: Optional[str] = None
+    ) -> List[Tuple[str, str]]:
         """Find related entities"""
         relations = self._relations.get(entity, [])
         if relation:
@@ -200,8 +216,9 @@ class ChainOfThought:
         self.model_name = model_name
         self._reasoning_history: List[List[ReasoningStep]] = []
 
-    async def reason(self, question: str, context: str = "",
-                     max_steps: int = 10) -> Tuple[str, List[ReasoningStep], float]:
+    async def reason(
+        self, question: str, context: str = "", max_steps: int = 10
+    ) -> Tuple[str, List[ReasoningStep], float]:
         """Perform chain-of-thought reasoning"""
         steps = []
         current_thought = question
@@ -213,7 +230,7 @@ class ChainOfThought:
                 thought="",
                 action="",
                 observation="",
-                confidence=0.0
+                confidence=0.0,
             )
 
             # Generate thought
@@ -245,8 +262,9 @@ class ChainOfThought:
 
         return final_answer, steps, overall_confidence
 
-    def _build_thought_prompt(self, question: str, context: str,
-                              steps: List[ReasoningStep]) -> str:
+    def _build_thought_prompt(
+        self, question: str, context: str, steps: List[ReasoningStep]
+    ) -> str:
         """Build prompt for thought generation"""
         prompt = f"""Question: {question}
 
@@ -279,18 +297,18 @@ Based on the above, provide the next reasoning step in JSON format:
                 "action": "analyze",
                 "observation": "Pattern identified",
                 "confidence": 0.7,
-                "is_final": False
+                "is_final": False,
             }
 
         try:
             response = await self.llm_client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
+                temperature=0.3,
             )
             content = response.choices[0].message.content
             # Parse JSON from response
-            json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+            json_match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
             return {"thought": content, "confidence": 0.5}
@@ -325,14 +343,20 @@ Based on the above, provide the next reasoning step in JSON format:
         confidences = [s.confidence for s in steps]
         # Use geometric mean for confidence propagation
         import math
+
         return math.exp(sum(math.log(c + 0.01) for c in confidences) / len(confidences))
 
 
 class TreeOfThought:
     """Tree-of-Thought reasoning for complex problems"""
 
-    def __init__(self, llm_client: Any = None, model_name: str = "gpt-4",
-                 branching_factor: int = 3, max_depth: int = 5):
+    def __init__(
+        self,
+        llm_client: Any = None,
+        model_name: str = "gpt-4",
+        branching_factor: int = 3,
+        max_depth: int = 5,
+    ):
         self.llm_client = llm_client
         self.model_name = model_name
         self.branching_factor = branching_factor
@@ -356,8 +380,9 @@ class TreeOfThought:
 
         return tree
 
-    async def _generate_branches(self, question: str, context: str,
-                                  parent_id: Optional[str], depth: int) -> List[ReasoningBranch]:
+    async def _generate_branches(
+        self, question: str, context: str, parent_id: Optional[str], depth: int
+    ) -> List[ReasoningBranch]:
         """Generate reasoning branches"""
         if depth >= self.max_depth:
             return []
@@ -378,13 +403,15 @@ class TreeOfThought:
                 parent_id=parent_id,
                 thought=thought,
                 score=0.5 + (0.1 * (self.branching_factor - i)),  # Initial scoring
-                is_terminal=(depth == self.max_depth - 1)
+                is_terminal=(depth == self.max_depth - 1),
             )
             branches.append(branch)
 
         return branches
 
-    async def _generate_thought(self, question: str, context: str, variation: int) -> str:
+    async def _generate_thought(
+        self, question: str, context: str, variation: int
+    ) -> str:
         """Generate a thought variation"""
         if not self.llm_client:
             return f"Analytical approach {variation + 1}"
@@ -397,7 +424,7 @@ Generate thought variation {variation + 1} of {self.branching_factor} for solvin
             response = await self.llm_client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.7 + (variation * 0.1)
+                temperature=0.7 + (variation * 0.1),
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
@@ -416,7 +443,7 @@ Generate thought variation {variation + 1} of {self.branching_factor} for solvin
                     tree.root_question,
                     context + f"\nPrevious thought: {branch.thought}",
                     branch.branch_id,
-                    1  # Depth
+                    1,  # Depth
                 )
 
                 # Recursively explore children
@@ -435,10 +462,10 @@ Return only a number between 0 and 1."""
                 response = await self.llm_client.chat.completions.create(
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1
+                    temperature=0.1,
                 )
                 content = response.choices[0].message.content.strip()
-                return float(re.search(r'[\d.]+', content).group())
+                return float(re.search(r"[\d.]+", content).group())
             except:
                 pass
         return branch.score
@@ -493,15 +520,18 @@ class MetaCognition:
         self._error_patterns: Dict[str, int] = {}
         self._successful_strategies: Dict[str, int] = {}
 
-    def evaluate_reasoning(self, steps: List[ReasoningStep],
-                           actual_result: Optional[str] = None) -> Dict[str, Any]:
+    def evaluate_reasoning(
+        self, steps: List[ReasoningStep], actual_result: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Evaluate reasoning quality"""
         evaluation = {
             "step_count": len(steps),
-            "avg_confidence": sum(s.confidence for s in steps) / len(steps) if steps else 0,
+            "avg_confidence": (
+                sum(s.confidence for s in steps) / len(steps) if steps else 0
+            ),
             "coherence": self._check_coherence(steps),
             "completeness": self._check_completeness(steps),
-            "suggestions": []
+            "suggestions": [],
         }
 
         if evaluation["coherence"] < 0.5:
@@ -521,7 +551,7 @@ class MetaCognition:
         # Simple coherence check: confidence should not drop dramatically
         drops = 0
         for i in range(1, len(steps)):
-            if steps[i].confidence < steps[i-1].confidence - 0.3:
+            if steps[i].confidence < steps[i - 1].confidence - 0.3:
                 drops += 1
 
         return 1.0 - (drops / len(steps))
@@ -538,7 +568,9 @@ class MetaCognition:
     def record_strategy(self, strategy: str, success: bool):
         """Record strategy usage"""
         if success:
-            self._successful_strategies[strategy] = self._successful_strategies.get(strategy, 0) + 1
+            self._successful_strategies[strategy] = (
+                self._successful_strategies.get(strategy, 0) + 1
+            )
         else:
             self._error_patterns[strategy] = self._error_patterns.get(strategy, 0) + 1
 
@@ -570,13 +602,17 @@ class AbsoluteZeroReasoner:
             "Something cannot be both true and false simultaneously",
             "Every effect has a cause",
             "The simplest explanation is often correct",
-            "Patterns in data suggest underlying structure"
+            "Patterns in data suggest underlying structure",
         ]
         for axiom in axioms:
             self.knowledge_base.add_axiom(axiom)
 
-    async def reason(self, question: str, context: str = "",
-                     mode: ReasoningMode = ReasoningMode.DEDUCTIVE) -> Dict[str, Any]:
+    async def reason(
+        self,
+        question: str,
+        context: str = "",
+        mode: ReasoningMode = ReasoningMode.DEDUCTIVE,
+    ) -> Dict[str, Any]:
         """Perform reasoning using the appropriate method"""
 
         # Select reasoning strategy
@@ -602,12 +638,14 @@ class AbsoluteZeroReasoner:
         # Record conclusion
         if confidence > 0.5:
             conclusion = Conclusion(
-                conclusion_id=hashlib.md5(f"{question}{answer}".encode()).hexdigest()[:12],
+                conclusion_id=hashlib.md5(f"{question}{answer}".encode()).hexdigest()[
+                    :12
+                ],
                 statement=answer,
                 confidence=confidence,
                 supporting_premises=[],
                 reasoning_chain=[s.thought for s in steps] if steps else [],
-                mode=mode
+                mode=mode,
             )
             self.knowledge_base._conclusions[conclusion.conclusion_id] = conclusion
 
@@ -616,14 +654,24 @@ class AbsoluteZeroReasoner:
             "answer": answer,
             "confidence": confidence,
             "reasoning_type": reasoning_type,
-            "steps": [{"thought": s.thought, "confidence": s.confidence} for s in steps] if steps else [],
+            "steps": (
+                [{"thought": s.thought, "confidence": s.confidence} for s in steps]
+                if steps
+                else []
+            ),
             "evaluation": evaluation,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     def _is_complex_question(self, question: str) -> bool:
         """Determine if question requires tree-of-thought"""
-        complex_indicators = ["compare", "multiple", "different ways", "alternatives", "best approach"]
+        complex_indicators = [
+            "compare",
+            "multiple",
+            "different ways",
+            "alternatives",
+            "best approach",
+        ]
         return any(ind in question.lower() for ind in complex_indicators)
 
     async def reason_from_first_principles(self, problem: str) -> Dict[str, Any]:
@@ -642,21 +690,22 @@ class AbsoluteZeroReasoner:
             # Reason about component
             result = await self.reason(
                 f"Given: {current_understanding}\nAnalyze: {component}",
-                context="\n".join(p.statement for p in relevant)
+                context="\n".join(p.statement for p in relevant),
             )
 
-            reasoning_chain.append({
-                "component": component,
-                "analysis": result["answer"],
-                "confidence": result["confidence"]
-            })
+            reasoning_chain.append(
+                {
+                    "component": component,
+                    "analysis": result["answer"],
+                    "confidence": result["confidence"],
+                }
+            )
 
             current_understanding += f"\n{result['answer']}"
 
         # Synthesize final answer
         synthesis = await self.reason(
-            f"Synthesize understanding of: {problem}",
-            context=current_understanding
+            f"Synthesize understanding of: {problem}", context=current_understanding
         )
 
         return {
@@ -664,7 +713,7 @@ class AbsoluteZeroReasoner:
             "decomposition": decomposition,
             "reasoning_chain": reasoning_chain,
             "synthesis": synthesis["answer"],
-            "overall_confidence": synthesis["confidence"]
+            "overall_confidence": synthesis["confidence"],
         }
 
     async def _decompose_problem(self, problem: str) -> List[str]:
@@ -678,10 +727,10 @@ Return a JSON list of components:"""
                 response = await self.llm_client.chat.completions.create(
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3
+                    temperature=0.3,
                 )
                 content = response.choices[0].message.content
-                match = re.search(r'\[.*\]', content, re.DOTALL)
+                match = re.search(r"\[.*\]", content, re.DOTALL)
                 if match:
                     return json.loads(match.group())
             except:
@@ -692,6 +741,8 @@ Return a JSON list of components:"""
 
 
 # Factory function
-def create_reasoner(llm_client: Any = None, model_name: str = "gpt-4") -> AbsoluteZeroReasoner:
+def create_reasoner(
+    llm_client: Any = None, model_name: str = "gpt-4"
+) -> AbsoluteZeroReasoner:
     """Create a reasoning engine"""
     return AbsoluteZeroReasoner(llm_client, model_name)

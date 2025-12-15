@@ -18,6 +18,7 @@ suggest actions based on past successes WITHOUT modifying the underlying LLM.
 The term "learning" here refers to accumulating experience data, not machine
 learning in the SGD sense.
 """
+
 import asyncio
 import logging
 import json
@@ -36,6 +37,7 @@ from pathlib import Path
 try:
     import chromadb
     from sentence_transformers import SentenceTransformer
+
     HAS_RAG = True
 except ImportError:
     HAS_RAG = False
@@ -45,14 +47,16 @@ logger = logging.getLogger(__name__)
 
 class LearningSignal(Enum):
     """Types of learning signals"""
-    POSITIVE = "positive"       # Successful outcome
-    NEGATIVE = "negative"       # Failed outcome
-    NEUTRAL = "neutral"         # Uncertain outcome
-    CORRECTIVE = "corrective"   # External correction
+
+    POSITIVE = "positive"  # Successful outcome
+    NEGATIVE = "negative"  # Failed outcome
+    NEUTRAL = "neutral"  # Uncertain outcome
+    CORRECTIVE = "corrective"  # External correction
 
 
 class ExperienceType(Enum):
     """Types of experiences to learn from"""
+
     TASK_COMPLETION = "task_completion"
     ERROR_RECOVERY = "error_recovery"
     OPTIMIZATION = "optimization"
@@ -63,6 +67,7 @@ class ExperienceType(Enum):
 @dataclass
 class Experience:
     """A learning experience"""
+
     experience_id: str
     experience_type: ExperienceType
     context: Dict[str, Any]
@@ -83,13 +88,14 @@ class Experience:
             "signal": self.signal.value,
             "reward": self.reward,
             "timestamp": self.timestamp,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
 @dataclass
 class Pattern:
     """A learned pattern"""
+
     pattern_id: str
     pattern_type: str
     conditions: List[Dict[str, Any]]
@@ -110,6 +116,7 @@ class Pattern:
 @dataclass
 class Skill:
     """A learned skill"""
+
     skill_id: str
     name: str
     description: str
@@ -139,7 +146,9 @@ class ExperienceBuffer:
         # Cleanup old priorities
         if len(self._priorities) > self.max_size * 1.5:
             current_ids = {e.experience_id for e in self._buffer}
-            self._priorities = {k: v for k, v in self._priorities.items() if k in current_ids}
+            self._priorities = {
+                k: v for k, v in self._priorities.items() if k in current_ids
+            }
 
     def sample(self, batch_size: int) -> List[Experience]:
         """Sample experiences from buffer"""
@@ -149,14 +158,18 @@ class ExperienceBuffer:
         if self.priority_sampling:
             # Priority-based sampling
             import random
+
             weights = [self._priorities.get(e.experience_id, 1.0) for e in self._buffer]
             total = sum(weights)
             weights = [w / total for w in weights]
 
-            indices = random.choices(range(len(self._buffer)), weights=weights, k=batch_size)
+            indices = random.choices(
+                range(len(self._buffer)), weights=weights, k=batch_size
+            )
             return [self._buffer[i] for i in indices]
         else:
             import random
+
             return random.sample(list(self._buffer), batch_size)
 
     def get_recent(self, count: int) -> List[Experience]:
@@ -193,7 +206,9 @@ class PatternExtractor:
 
         return patterns
 
-    def _group_by_context(self, experiences: List[Experience]) -> Dict[str, List[Experience]]:
+    def _group_by_context(
+        self, experiences: List[Experience]
+    ) -> Dict[str, List[Experience]]:
         """Group experiences by similar context"""
         groups = {}
 
@@ -230,7 +245,8 @@ class PatternExtractor:
 
         best_action = max(
             action_success.keys(),
-            key=lambda a: action_success[a]["success"] / max(action_success[a]["total"], 1)
+            key=lambda a: action_success[a]["success"]
+            / max(action_success[a]["total"], 1),
         )
 
         # Calculate confidence
@@ -238,20 +254,27 @@ class PatternExtractor:
         confidence = stats["success"] / stats["total"] if stats["total"] > 0 else 0
 
         # Find expected outcome
-        positive_outcomes = [e.outcome for e in experiences
-                           if e.action == best_action and e.signal == LearningSignal.POSITIVE]
+        positive_outcomes = [
+            e.outcome
+            for e in experiences
+            if e.action == best_action and e.signal == LearningSignal.POSITIVE
+        ]
         expected_outcome = str(positive_outcomes[0]) if positive_outcomes else "success"
 
         return Pattern(
-            pattern_id=hashlib.md5(f"{conditions}{best_action}".encode()).hexdigest()[:12],
+            pattern_id=hashlib.md5(f"{conditions}{best_action}".encode()).hexdigest()[
+                :12
+            ],
             pattern_type="extracted",
             conditions=conditions,
             action=best_action,
             expected_outcome=expected_outcome,
-            confidence=confidence
+            confidence=confidence,
         )
 
-    def _find_common_conditions(self, experiences: List[Experience]) -> List[Dict[str, Any]]:
+    def _find_common_conditions(
+        self, experiences: List[Experience]
+    ) -> List[Dict[str, Any]]:
         """Find conditions common to all experiences"""
         if not experiences:
             return []
@@ -273,16 +296,20 @@ class SkillBuilder:
         self._skills: Dict[str, Skill] = {}
         self._pattern_to_skill: Dict[str, str] = {}
 
-    def create_skill(self, name: str, description: str, patterns: List[Pattern]) -> Skill:
+    def create_skill(
+        self, name: str, description: str, patterns: List[Pattern]
+    ) -> Skill:
         """Create a new skill from patterns"""
-        skill_id = hashlib.md5(f"{name}{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+        skill_id = hashlib.md5(
+            f"{name}{datetime.now().isoformat()}".encode()
+        ).hexdigest()[:12]
 
         skill = Skill(
             skill_id=skill_id,
             name=name,
             description=description,
             patterns=[p.pattern_id for p in patterns],
-            proficiency=self._calculate_initial_proficiency(patterns)
+            proficiency=self._calculate_initial_proficiency(patterns),
         )
 
         self._skills[skill_id] = skill
@@ -302,7 +329,9 @@ class SkillBuilder:
         # Weight by usage
         total_usage = sum(p.usage_count for p in patterns)
         if total_usage > 0:
-            weighted_success = sum(p.success_rate * p.usage_count for p in patterns) / total_usage
+            weighted_success = (
+                sum(p.success_rate * p.usage_count for p in patterns) / total_usage
+            )
             return (avg_confidence + weighted_success) / 2
 
         return avg_confidence * 0.5
@@ -340,10 +369,12 @@ class SkillBuilder:
 class LearningPolicy:
     """Policy for learning decisions"""
 
-    def __init__(self,
-                 learning_rate: float = 0.01,
-                 exploration_rate: float = 0.1,
-                 decay_rate: float = 0.999):
+    def __init__(
+        self,
+        learning_rate: float = 0.01,
+        exploration_rate: float = 0.1,
+        decay_rate: float = 0.999,
+    ):
         self.learning_rate = learning_rate
         self.exploration_rate = exploration_rate
         self.decay_rate = decay_rate
@@ -352,7 +383,8 @@ class LearningPolicy:
     def should_explore(self) -> bool:
         """Decide whether to explore or exploit"""
         import random
-        current_rate = self.exploration_rate * (self.decay_rate ** self._step_count)
+
+        current_rate = self.exploration_rate * (self.decay_rate**self._step_count)
         return random.random() < current_rate
 
     def calculate_update(self, reward: float, confidence: float) -> float:
@@ -368,14 +400,13 @@ class LearningPolicy:
 class RecursiveLearner:
     """Main recursive learning system"""
 
-    def __init__(self,
-                 storage_path: Optional[Path] = None,
-                 buffer_size: int = 10000):
+    def __init__(self, storage_path: Optional[Path] = None, buffer_size: int = 10000):
         self.storage_path = storage_path or Path.home() / ".astro" / "learning"
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
         # Use SQLite for scalable persistence instead of JSON
-        from core.database import DatabaseManager
+        from src.core.database import DatabaseManager
+
         self._db = DatabaseManager()
 
         self.experience_buffer = ExperienceBuffer(max_size=buffer_size)
@@ -398,24 +429,35 @@ class RecursiveLearner:
 
         if HAS_RAG:
             try:
-                logger.info("Initializing Semantic Memory (ChromaDB + SentenceTransformers)...")
-                self.chroma_client = chromadb.PersistentClient(path=str(self.storage_path / "chroma"))
-                self.collection = self.chroma_client.get_or_create_collection(name="experiences")
+                logger.info(
+                    "Initializing Semantic Memory (ChromaDB + SentenceTransformers)..."
+                )
+                self.chroma_client = chromadb.PersistentClient(
+                    path=str(self.storage_path / "chroma")
+                )
+                self.collection = self.chroma_client.get_or_create_collection(
+                    name="experiences"
+                )
                 # Use a lightweight model for speed
-                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
                 self._rag_available = True
                 logger.info("Semantic Memory initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize Semantic Memory: {e}")
                 self._rag_available = False
         else:
-            logger.warning("ChromaDB or SentenceTransformers not found. Semantic Memory disabled.")
-    def record_experience(self,
-                          experience_type: ExperienceType,
-                          context: Dict[str, Any],
-                          action: str,
-                          outcome: Dict[str, Any],
-                          reward: float) -> str:
+            logger.warning(
+                "ChromaDB or SentenceTransformers not found. Semantic Memory disabled."
+            )
+
+    def record_experience(
+        self,
+        experience_type: ExperienceType,
+        context: Dict[str, Any],
+        action: str,
+        outcome: Dict[str, Any],
+        reward: float,
+    ) -> str:
         """Record a new experience"""
         # Determine signal from reward
         if reward > 0.3:
@@ -434,7 +476,7 @@ class RecursiveLearner:
             action=action,
             outcome=outcome,
             signal=signal,
-            reward=reward
+            reward=reward,
         )
 
         # Add to buffer with priority based on reward magnitude
@@ -454,13 +496,15 @@ class RecursiveLearner:
                 self.collection.add(
                     documents=[context_str],
                     embeddings=[embedding],
-                    metadatas=[{
-                        "action": action,
-                        "reward": reward,
-                        "signal": signal.value,
-                        "type": experience_type.value
-                    }],
-                    ids=[experience.experience_id]
+                    metadatas=[
+                        {
+                            "action": action,
+                            "reward": reward,
+                            "signal": signal.value,
+                            "type": experience_type.value,
+                        }
+                    ],
+                    ids=[experience.experience_id],
                 )
             except Exception as e:
                 logger.error(f"Failed to store experience in Vector DB: {e}")
@@ -536,19 +580,21 @@ class RecursiveLearner:
                     skill = self.skill_builder.create_skill(
                         name=f"skill_{action}",
                         description=f"Learned skill for {action}",
-                        patterns=patterns
+                        patterns=patterns,
                     )
 
         # Calculate improvement metrics
         improvement = self._calculate_improvement()
 
-        self._improvement_history.append({
-            "iteration": self._learning_iterations,
-            "patterns_added": patterns_added,
-            "total_patterns": len(self._patterns),
-            "improvement": improvement,
-            "timestamp": datetime.now().isoformat()
-        })
+        self._improvement_history.append(
+            {
+                "iteration": self._learning_iterations,
+                "patterns_added": patterns_added,
+                "total_patterns": len(self._patterns),
+                "improvement": improvement,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         # Save knowledge periodically
         if self._learning_iterations % 10 == 0:
@@ -561,7 +607,7 @@ class RecursiveLearner:
             "patterns_added": patterns_added,
             "total_patterns": len(self._patterns),
             "total_skills": len(self.skill_builder._skills),
-            "improvement": improvement
+            "improvement": improvement,
         }
 
     def _calculate_improvement(self) -> float:
@@ -573,7 +619,9 @@ class RecursiveLearner:
         if not self._patterns:
             return 0.0
 
-        avg_success = sum(p.success_rate for p in self._patterns.values()) / len(self._patterns)
+        avg_success = sum(p.success_rate for p in self._patterns.values()) / len(
+            self._patterns
+        )
         return avg_success
 
     def suggest_action(self, context: Dict[str, Any]) -> Optional[Tuple[str, float]]:
@@ -586,6 +634,7 @@ class RecursiveLearner:
             # Return random pattern's action
             if self._patterns:
                 import random
+
                 pattern = random.choice(list(self._patterns.values()))
                 return pattern.action, pattern.confidence * 0.5
 
@@ -606,17 +655,20 @@ class RecursiveLearner:
                 embedding = self.embedding_model.encode(context_str).tolist()
 
                 results = self.collection.query(
-                    query_embeddings=[embedding],
-                    n_results=5
+                    query_embeddings=[embedding], n_results=5
                 )
 
-                if results['ids'] and results['ids'][0]:
+                if results["ids"] and results["ids"][0]:
                     # Analyze retrieved experiences
                     actions = {}
-                    for i, meta in enumerate(results['metadatas'][0]):
-                        action = meta['action']
-                        reward = float(meta['reward'])
-                        dist = results['distances'][0][i] if 'distances' in results else 0.5
+                    for i, meta in enumerate(results["metadatas"][0]):
+                        action = meta["action"]
+                        reward = float(meta["reward"])
+                        dist = (
+                            results["distances"][0][i]
+                            if "distances" in results
+                            else 0.5
+                        )
 
                         # Score = reward weighted by similarity (1 - dist)
                         score = reward * (1 - min(dist, 1.0))
@@ -628,14 +680,16 @@ class RecursiveLearner:
                     # Pick best action from semantic retrieval
                     if actions:
                         rag_best_action = max(actions.items(), key=lambda x: x[1])
-                        if rag_best_action[1] > 0.2: # Threshold
+                        if rag_best_action[1] > 0.2:  # Threshold
                             return rag_best_action[0], min(rag_best_action[1], 0.9)
             except Exception as e:
                 logger.error(f"Semantic retrieval failed: {e}")
 
         return None
 
-    def _calculate_match_score(self, context: Dict[str, Any], pattern: Pattern) -> float:
+    def _calculate_match_score(
+        self, context: Dict[str, Any], pattern: Pattern
+    ) -> float:
         """Calculate how well context matches pattern"""
         if not pattern.conditions:
             return pattern.confidence * 0.5
@@ -658,16 +712,25 @@ class RecursiveLearner:
             "learning_iterations": self._learning_iterations,
             "avg_pattern_confidence": (
                 sum(p.confidence for p in self._patterns.values()) / len(self._patterns)
-                if self._patterns else 0.0
+                if self._patterns
+                else 0.0
             ),
             "avg_skill_proficiency": (
-                sum(s.proficiency for s in self.skill_builder._skills.values()) / len(self.skill_builder._skills)
-                if self.skill_builder._skills else 0.0
+                sum(s.proficiency for s in self.skill_builder._skills.values())
+                / len(self.skill_builder._skills)
+                if self.skill_builder._skills
+                else 0.0
             ),
             "top_patterns": [
-                {"action": p.action, "confidence": p.confidence, "success_rate": p.success_rate}
-                for p in sorted(self._patterns.values(), key=lambda x: x.confidence, reverse=True)[:5]
-            ]
+                {
+                    "action": p.action,
+                    "confidence": p.confidence,
+                    "success_rate": p.success_rate,
+                }
+                for p in sorted(
+                    self._patterns.values(), key=lambda x: x.confidence, reverse=True
+                )[:5]
+            ],
         }
 
     def _save_knowledge(self):
@@ -684,11 +747,13 @@ class RecursiveLearner:
                     confidence=pattern.confidence,
                     usage_count=pattern.usage_count,
                     success_count=pattern.success_count,
-                    last_used=pattern.last_used
+                    last_used=pattern.last_used,
                 )
 
             # Save metadata
-            self._db.save_learning_metadata("learning_iterations", self._learning_iterations)
+            self._db.save_learning_metadata(
+                "learning_iterations", self._learning_iterations
+            )
             self._db.save_learning_metadata("last_save", datetime.now().isoformat())
 
             logger.debug(f"Knowledge saved to SQLite ({len(self._patterns)} patterns)")
@@ -711,11 +776,13 @@ class RecursiveLearner:
                     confidence=p["confidence"],
                     usage_count=p.get("usage_count", 0),
                     success_count=p.get("success_count", 0),
-                    last_used=p.get("last_used")
+                    last_used=p.get("last_used"),
                 )
 
             # Load metadata
-            self._learning_iterations = self._db.load_learning_metadata("learning_iterations", 0)
+            self._learning_iterations = self._db.load_learning_metadata(
+                "learning_iterations", 0
+            )
 
             if self._patterns:
                 logger.info(f"Loaded {len(self._patterns)} patterns from SQLite")
@@ -725,6 +792,7 @@ class RecursiveLearner:
 
 # Singleton instance
 _learner: Optional[RecursiveLearner] = None
+
 
 def get_recursive_learner() -> RecursiveLearner:
     """Get or create the recursive learner singleton"""

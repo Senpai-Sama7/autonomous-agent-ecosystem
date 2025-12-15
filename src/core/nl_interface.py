@@ -7,16 +7,18 @@ All user input is sanitized before LLM processing.
 ENHANCED: Integrates Zero Reasoning for structured reasoning
 on complex requests, improving intent extraction accuracy.
 """
+
 import logging
 import json
 import uuid
 import asyncio
 import re
 from typing import Dict, Any, List, Optional
-from core.engine import AgentEngine, Workflow, Task, WorkflowPriority
+from src.core.engine import AgentEngine, Task, Workflow, WorkflowPriority
 
 try:
     from openai import AsyncOpenAI
+
     HAS_ASYNC_OPENAI = True
 except ImportError:
     AsyncOpenAI = None
@@ -24,13 +26,19 @@ except ImportError:
 
 try:
     from transformers import pipeline
+
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
 
 # Zero Reasoning integration for structured intent extraction
 try:
-    from core.zero_reasoning import create_reasoner, AbsoluteZeroReasoner, ReasoningMode
+    from src.core.zero_reasoning import (
+        AbsoluteZeroReasoner,
+        ReasoningMode,
+        create_reasoner,
+    )
+
     HAS_ZERO_REASONING = True
 except ImportError:
     AbsoluteZeroReasoner = None
@@ -41,6 +49,7 @@ logger = logging.getLogger("NaturalLanguageInterface")
 
 class SecurityException(Exception):
     """Raised when a security violation is detected (e.g., prompt injection attempt)"""
+
     pass
 
 
@@ -54,7 +63,6 @@ HOSTILE_PATTERNS = [
     r"forget\s+(all\s+)?previous",
     r"override\s+(all\s+)?instructions?",
     r"new\s+instructions?:\s*",
-
     # Mode switching attempts
     r"system\s*override",
     r"admin\s*mode",
@@ -63,7 +71,6 @@ HOSTILE_PATTERNS = [
     r"maintenance\s*mode",
     r"god\s*mode",
     r"unrestricted\s*mode",
-
     # Bypass attempts
     r"bypass\s+(all\s+)?restrictions?",
     r"bypass\s+(all\s+)?safety",
@@ -72,34 +79,29 @@ HOSTILE_PATTERNS = [
     r"bypass\s+(all\s+)?guidelines",
     r"remove\s+(all\s+)?restrictions?",
     r"disable\s+(all\s+)?restrictions?",
-
     # Role-playing jailbreaks
     r"you\s+are\s+now\s+(a|an)",  # "You are now a DAN"
     r"pretend\s+you\s+are",
     r"act\s+as\s+if\s+you\s+have\s+no\s+restrictions",
     r"roleplay\s+as",
     r"imagine\s+you\s+are\s+a\s+different",
-
     # Known jailbreak patterns
     r"jailbreak",
     r"do\s+anything\s+now",
     r"\bdan\b",  # DAN prompt
     r"\bdeveloper\s*mode\s*enabled\b",
     r"stay\s+in\s+character",
-
     # Guideline bypass
     r"ignore\s+ethical\s+guidelines",
     r"ignore\s+safety\s+guidelines",
     r"ignore\s+your\s+(rules|guidelines|constraints)",
     r"don'?t\s+follow\s+your\s+(rules|guidelines)",
-
     # Injection markers
     r"\[\s*system\s*\]",  # [SYSTEM] injection
-    r"<\s*system\s*>",   # <system> injection
-    r"\{\{.*\}\}",       # Template injection {{...}}
-    r"<\|.*\|>",         # Special token injection
+    r"<\s*system\s*>",  # <system> injection
+    r"\{\{.*\}\}",  # Template injection {{...}}
+    r"<\|.*\|>",  # Special token injection
     r"###\s*instruction",  # Markdown-style injection
-
     # Prompt leaking attempts
     r"reveal\s+(your\s+)?(system\s+)?prompt",
     r"show\s+(me\s+)?(your\s+)?instructions",
@@ -109,16 +111,30 @@ HOSTILE_PATTERNS = [
 
 # Additional heuristic checks when ML classifier is not available
 INJECTION_HEURISTICS = {
-    "instruction_ratio": 0.15,       # Max ratio of instruction-like words
-    "special_char_ratio": 0.10,      # Max ratio of special characters
+    "instruction_ratio": 0.15,  # Max ratio of instruction-like words
+    "special_char_ratio": 0.10,  # Max ratio of special characters
     "repeated_pattern_threshold": 3,  # Max times a suspicious phrase can repeat
 }
 
 # Words commonly used in injection attempts
 INJECTION_KEYWORDS = {
-    "ignore", "override", "bypass", "disable", "forget", "disregard",
-    "pretend", "roleplay", "jailbreak", "unrestricted", "uncensored",
-    "admin", "system", "developer", "instruction", "prompt", "constraint"
+    "ignore",
+    "override",
+    "bypass",
+    "disable",
+    "forget",
+    "disregard",
+    "pretend",
+    "roleplay",
+    "jailbreak",
+    "unrestricted",
+    "uncensored",
+    "admin",
+    "system",
+    "developer",
+    "instruction",
+    "prompt",
+    "constraint",
 }
 
 
@@ -130,8 +146,13 @@ class NaturalLanguageInterface:
     Enhanced with Zero Reasoning for complex multi-step request analysis.
     """
 
-    def __init__(self, engine: AgentEngine, llm_client: Any = None, model_name: str = "gpt-3.5-turbo",
-                 enable_reasoning: bool = True):
+    def __init__(
+        self,
+        engine: AgentEngine,
+        llm_client: Any = None,
+        model_name: str = "gpt-3.5-turbo",
+        enable_reasoning: bool = True,
+    ):
         self.engine = engine
         self.llm_client = llm_client
         self.model_name = model_name
@@ -141,16 +162,20 @@ class NaturalLanguageInterface:
         self.injection_classifier = None
         if HAS_TRANSFORMERS:
             try:
-                logger.info("Loading prompt injection classifier (protectai/deberta-v3-base-prompt-injection)...")
+                logger.info(
+                    "Loading prompt injection classifier (protectai/deberta-v3-base-prompt-injection)..."
+                )
                 self.injection_classifier = pipeline(
                     "text-classification",
-                    model="protectai/deberta-v3-base-prompt-injection"
+                    model="protectai/deberta-v3-base-prompt-injection",
                 )
                 logger.info("Prompt injection classifier loaded successfully")
             except Exception as e:
                 logger.warning(f"Failed to load injection classifier: {e}")
         else:
-            logger.warning("Transformers library not found. ML-based prompt injection defense disabled.")
+            logger.warning(
+                "Transformers library not found. ML-based prompt injection defense disabled."
+            )
 
         # Initialize Zero Reasoner for complex request analysis
         self.reasoner: Optional[AbsoluteZeroReasoner] = None
@@ -160,6 +185,7 @@ class NaturalLanguageInterface:
                 logger.info("Zero Reasoning engine initialized for NL processing")
             except Exception as e:
                 logger.warning(f"Failed to initialize Zero Reasoner: {e}")
+
     def _sanitize_input(self, input_str: str) -> str:
         """
         Sanitize user input to prevent prompt injection attacks.
@@ -186,7 +212,9 @@ class NaturalLanguageInterface:
         # Check against hostile patterns
         for pattern in HOSTILE_PATTERNS:
             if re.search(pattern, normalized, re.IGNORECASE):
-                logger.warning(f"SECURITY: Blocked prompt injection attempt. Pattern: {pattern}")
+                logger.warning(
+                    f"SECURITY: Blocked prompt injection attempt. Pattern: {pattern}"
+                )
                 raise SecurityException(
                     "Your request was blocked for security reasons. "
                     "Please rephrase your request without attempting to modify system behavior."
@@ -200,9 +228,13 @@ class NaturalLanguageInterface:
                 result = self.injection_classifier(model_input)[0]
 
                 # Check for injection (label is usually 'INJECTION' or 'SAFE')
-                if result['label'] == 'INJECTION' and result['score'] > 0.9:
-                    logger.warning(f"SECURITY: ML model detected prompt injection (score: {result['score']:.2f})")
-                    raise SecurityException("Adversarial input detected by AI defense system")
+                if result["label"] == "INJECTION" and result["score"] > 0.9:
+                    logger.warning(
+                        f"SECURITY: ML model detected prompt injection (score: {result['score']:.2f})"
+                    )
+                    raise SecurityException(
+                        "Adversarial input detected by AI defense system"
+                    )
             except SecurityException:
                 raise
             except Exception as e:
@@ -212,26 +244,37 @@ class NaturalLanguageInterface:
         # Length limit to prevent token exhaustion attacks
         max_length = 10000
         if len(normalized) > max_length:
-            logger.warning(f"SECURITY: Input truncated from {len(normalized)} to {max_length} chars")
+            logger.warning(
+                f"SECURITY: Input truncated from {len(normalized)} to {max_length} chars"
+            )
             normalized = normalized[:max_length]
 
         # Strip potential control characters (except newlines/tabs)
-        normalized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', normalized)
+        normalized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", normalized)
 
         return normalized
 
     def _is_complex_request(self, user_input: str) -> bool:
         """Determine if the request requires structured reasoning analysis."""
         complex_indicators = [
-            "compare", "analyze", "multiple", "alternatives", "best approach",
-            "trade-offs", "pros and cons", "evaluate", "decide between",
-            "which is better", "should i use", "recommend", "optimize"
+            "compare",
+            "analyze",
+            "multiple",
+            "alternatives",
+            "best approach",
+            "trade-offs",
+            "pros and cons",
+            "evaluate",
+            "decide between",
+            "which is better",
+            "should i use",
+            "recommend",
+            "optimize",
         ]
         input_lower = user_input.lower()
         # Complex if input is long or contains complexity indicators
-        return (
-            len(user_input) > 200 or
-            any(indicator in input_lower for indicator in complex_indicators)
+        return len(user_input) > 200 or any(
+            indicator in input_lower for indicator in complex_indicators
         )
 
     async def _analyze_with_reasoning(self, user_input: str) -> Dict[str, Any]:
@@ -249,7 +292,7 @@ class NaturalLanguageInterface:
             result = await self.reasoner.reason(
                 question=f"What tasks and capabilities are needed to fulfill this user request? Request: {user_input}",
                 context="Available agents: Research (web_search, content_extraction), Code (code_generation, debugging), FileSystem (file_operations)",
-                mode=ReasoningMode.DEDUCTIVE
+                mode=ReasoningMode.DEDUCTIVE,
             )
 
             return {
@@ -257,7 +300,7 @@ class NaturalLanguageInterface:
                 "reasoning_answer": result.get("answer", ""),
                 "confidence": result.get("confidence", 0.0),
                 "reasoning_steps": result.get("steps", []),
-                "reasoning_type": result.get("reasoning_type", "chain_of_thought")
+                "reasoning_type": result.get("reasoning_type", "chain_of_thought"),
             }
         except Exception as e:
             logger.warning(f"Zero Reasoning analysis failed: {e}")
@@ -287,19 +330,29 @@ class NaturalLanguageInterface:
         try:
             # Check if request is complex and needs reasoning analysis
             reasoning_context = {}
-            if self.enable_reasoning and self.reasoner and self._is_complex_request(sanitized_input):
+            if (
+                self.enable_reasoning
+                and self.reasoner
+                and self._is_complex_request(sanitized_input)
+            ):
                 reasoning_context = await self._analyze_with_reasoning(sanitized_input)
                 if reasoning_context.get("enhanced"):
-                    logger.info(f"Reasoning analysis complete (confidence: {reasoning_context.get('confidence', 0):.2f})")
+                    logger.info(
+                        f"Reasoning analysis complete (confidence: {reasoning_context.get('confidence', 0):.2f})"
+                    )
 
             # Use LLM to parse request (with sanitized input and optional reasoning context)
-            workflow_plan = await self._parse_intent_with_llm(sanitized_input, reasoning_context)
+            workflow_plan = await self._parse_intent_with_llm(
+                sanitized_input, reasoning_context
+            )
             return await self._submit_parsed_workflow(workflow_plan)
         except Exception as e:
             logger.error(f"Failed to process NL request: {e}")
             raise
 
-    async def _parse_intent_with_llm(self, user_input: str, reasoning_context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def _parse_intent_with_llm(
+        self, user_input: str, reasoning_context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """Use LLM to convert text to structured workflow definition.
 
         Args:
@@ -345,7 +398,7 @@ class NaturalLanguageInterface:
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input}
+            {"role": "user", "content": user_input},
         ]
 
         # Check if client is async
@@ -355,17 +408,17 @@ class NaturalLanguageInterface:
             response = await self.llm_client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
         else:
             # Fallback to sync call (wrapped in thread if needed, but here we assume sync client is ok)
             # Ideally, we should run sync client in a thread to avoid blocking
-            if hasattr(self.llm_client.chat.completions, 'create'):
+            if hasattr(self.llm_client.chat.completions, "create"):
                 response = await asyncio.to_thread(
                     self.llm_client.chat.completions.create,
                     model=self.model_name,
                     messages=messages,
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
                 )
             else:
                 raise ValueError("Invalid LLM client provided")
@@ -389,7 +442,7 @@ class NaturalLanguageInterface:
                 required_capabilities=task_data.get("required_capabilities", []),
                 priority=WorkflowPriority.MEDIUM,
                 dependencies=dependencies,
-                payload=task_data.get("payload", {})
+                payload=task_data.get("payload", {}),
             )
             tasks.append(task)
 
@@ -397,7 +450,7 @@ class NaturalLanguageInterface:
             workflow_id=workflow_id,
             name=plan.get("name", "Generated Workflow"),
             tasks=tasks,
-            priority=WorkflowPriority.MEDIUM
+            priority=WorkflowPriority.MEDIUM,
         )
 
         await self.engine.submit_workflow(workflow)
@@ -410,30 +463,39 @@ class NaturalLanguageInterface:
 
         tasks = []
         if "research" in user_input or "search" in user_input:
-            tasks.append(Task(
-                task_id=f"task_{uuid.uuid4().hex[:8]}",
-                description=f"Research request: {user_input}",
-                required_capabilities=["web_search"],
-                payload={"query": user_input, "research_type": "web_search"}
-            ))
+            tasks.append(
+                Task(
+                    task_id=f"task_{uuid.uuid4().hex[:8]}",
+                    description=f"Research request: {user_input}",
+                    required_capabilities=["web_search"],
+                    payload={"query": user_input, "research_type": "web_search"},
+                )
+            )
 
         if "code" in user_input or "script" in user_input:
-            tasks.append(Task(
-                task_id=f"task_{uuid.uuid4().hex[:8]}",
-                description=f"Code request: {user_input}",
-                required_capabilities=["code_generation"],
-                dependencies=[t.task_id for t in tasks], # Depend on previous
-                payload={"code_task_type": "generate_code", "requirements": user_input}
-            ))
+            tasks.append(
+                Task(
+                    task_id=f"task_{uuid.uuid4().hex[:8]}",
+                    description=f"Code request: {user_input}",
+                    required_capabilities=["code_generation"],
+                    dependencies=[t.task_id for t in tasks],  # Depend on previous
+                    payload={
+                        "code_task_type": "generate_code",
+                        "requirements": user_input,
+                    },
+                )
+            )
 
         if not tasks:
-            raise ValueError("Could not determine intent from keywords. Please enable LLM for full NL support.")
+            raise ValueError(
+                "Could not determine intent from keywords. Please enable LLM for full NL support."
+            )
 
         workflow_id = f"workflow_{uuid.uuid4().hex[:8]}"
         workflow = Workflow(
             workflow_id=workflow_id,
             name=f"Keyword Workflow: {user_input[:20]}...",
-            tasks=tasks
+            tasks=tasks,
         )
 
         await self.engine.submit_workflow(workflow)

@@ -2,16 +2,19 @@
 TaskQueue - Thread-safe priority task queue with dependency tracking.
 Extracted from engine.py for better separation of concerns.
 """
+
 import asyncio
 import time
 from typing import Dict, Set, Optional, Any
 from enum import Enum
+
 
 class WorkflowPriority(Enum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
 
 class TaskQueue:
     """Thread-safe async priority queue with task lifecycle management."""
@@ -97,14 +100,17 @@ class TaskQueue:
         return self._active.copy()
 
     @staticmethod
-    def calculate_priority(base_priority: WorkflowPriority, deadline: Optional[float] = None,
-                          has_dependencies: bool = False) -> float:
+    def calculate_priority(
+        base_priority: WorkflowPriority,
+        deadline: Optional[float] = None,
+        has_dependencies: bool = False,
+    ) -> float:
         """Calculate dynamic priority score (lower = higher priority)."""
         base = {
             WorkflowPriority.CRITICAL: 0.1,
             WorkflowPriority.HIGH: 0.3,
             WorkflowPriority.MEDIUM: 0.5,
-            WorkflowPriority.LOW: 0.8
+            WorkflowPriority.LOW: 0.8,
         }.get(base_priority, 0.5)
 
         # Deadline factor

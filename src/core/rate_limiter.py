@@ -1,6 +1,7 @@
 """
 Rate Limiting System - Token bucket algorithm
 """
+
 import asyncio
 import time
 from collections import deque
@@ -42,7 +43,9 @@ class TokenBucketRateLimiter:
             remaining = self.max_requests - len(bucket)
             allowed = remaining > 0
 
-            reset_at = bucket[0] + self.window_seconds if bucket else now + self.window_seconds
+            reset_at = (
+                bucket[0] + self.window_seconds if bucket else now + self.window_seconds
+            )
             retry_after = max(0, reset_at - now) if not allowed else 0.0
 
             return RateLimitInfo(allowed, max(0, remaining), reset_at, retry_after)
@@ -68,7 +71,9 @@ class TokenBucketRateLimiter:
                 bucket.append(now)
                 remaining -= 1
 
-            reset_at = bucket[0] + self.window_seconds if bucket else now + self.window_seconds
+            reset_at = (
+                bucket[0] + self.window_seconds if bucket else now + self.window_seconds
+            )
             retry_after = max(0, reset_at - now) if not allowed else 0.0
 
             return RateLimitInfo(allowed, max(0, remaining), reset_at, retry_after)
@@ -76,14 +81,22 @@ class TokenBucketRateLimiter:
     def get_stats(self, key: str) -> Dict:
         """Get current stats for key."""
         if key not in self.buckets:
-            return {"requests": 0, "remaining": self.max_requests, "max": self.max_requests}
+            return {
+                "requests": 0,
+                "remaining": self.max_requests,
+                "max": self.max_requests,
+            }
 
         now = time.time()
         cutoff = now - self.window_seconds
         valid = [ts for ts in self.buckets[key] if ts >= cutoff]
 
-        return {"requests": len(valid), "remaining": max(0, self.max_requests - len(valid)),
-                "max": self.max_requests, "window": self.window_seconds}
+        return {
+            "requests": len(valid),
+            "remaining": max(0, self.max_requests - len(valid)),
+            "max": self.max_requests,
+            "window": self.window_seconds,
+        }
 
     def clear(self, key: str = None):
         """Clear rate limit data."""
@@ -121,12 +134,13 @@ class RateLimitManager:
 
 _manager: Optional[RateLimitManager] = None
 
+
 def get_rate_limit_manager() -> RateLimitManager:
     """Get or create rate limit manager with defaults."""
     global _manager
     if _manager is None:
         _manager = RateLimitManager()
-        _manager.add_limiter('task_submission', 100, 60)
-        _manager.add_limiter('workflow_creation', 20, 60)
-        _manager.add_limiter('api_calls', 1000, 60)
+        _manager.add_limiter("task_submission", 100, 60)
+        _manager.add_limiter("workflow_creation", 20, 60)
+        _manager.add_limiter("api_calls", 1000, 60)
     return _manager

@@ -13,7 +13,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -22,54 +21,63 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from enum import Enum
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query, Depends
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Query,
+    Depends,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # Import security middleware
-from api.middleware import (
+from src.api.middleware import (
     add_security_middleware,
+    authenticate_websocket,
     get_allowed_origins,
     security_config,
-    authenticate_websocket,
 )
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src.core.database import DatabaseManager
+from src.core.engine import AgentConfig, AgentEngine, Task, Workflow, WorkflowPriority
+from src.core.llm_factory import LLMFactory
+from src.core.nl_interface import NaturalLanguageInterface
 
-from core.engine import AgentEngine, Workflow, Task, WorkflowPriority, AgentConfig
-from core.nl_interface import NaturalLanguageInterface
-from core.llm_factory import LLMFactory
-from core.database import DatabaseManager
 # Lazy imports for agents to handle missing dependencies gracefully
 ResearchAgent = None
 CodeAgent = None
 FileSystemAgent = None
+
 
 def _import_agents():
     """Import agents lazily to handle missing dependencies."""
     global ResearchAgent, CodeAgent, FileSystemAgent
 
     try:
-        from agents.research_agent import ResearchAgent as _ResearchAgent
+        from src.agents.research_agent import ResearchAgent as _ResearchAgent
+
         ResearchAgent = _ResearchAgent
     except ImportError as e:
         logging.warning(f"ResearchAgent unavailable: {e}")
 
     try:
-        from agents.code_agent import CodeAgent as _CodeAgent
+        from src.agents.code_agent import CodeAgent as _CodeAgent
+
         CodeAgent = _CodeAgent
     except ImportError as e:
         logging.warning(f"CodeAgent unavailable: {e}")
 
     try:
-        from agents.filesystem_agent import FileSystemAgent as _FileSystemAgent
+        from src.agents.filesystem_agent import FileSystemAgent as _FileSystemAgent
+
         FileSystemAgent = _FileSystemAgent
     except ImportError as e:
         logging.warning(f"FileSystemAgent unavailable: {e}")
+
 
 logger = logging.getLogger("ASTRO.API")
 
@@ -77,12 +85,15 @@ logger = logging.getLogger("ASTRO.API")
 # PYDANTIC MODELS
 # ============================================================================
 
+
 class CommandRequest(BaseModel):
     command: str = Field(..., min_length=1, max_length=10000)
+
 
 class ChatMessageRequest(BaseModel):
     session_id: str = Field(default="default")
     message: str = Field(..., min_length=1, max_length=10000)
+
 
 class WorkflowCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -90,9 +101,11 @@ class WorkflowCreateRequest(BaseModel):
     priority: str = Field(default="medium")
     tasks: List[Dict[str, Any]] = Field(default_factory=list)
 
+
 class FileCreateRequest(BaseModel):
     path: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
+
 
 class KnowledgeItemRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
@@ -100,12 +113,14 @@ class KnowledgeItemRequest(BaseModel):
     type: str = Field(default="document")
     tags: List[str] = Field(default_factory=list)
 
+
 class SystemStatusResponse(BaseModel):
     status: str
     agents_count: int
     active_workflows: int
     uptime: float
     version: str = "1.0.0"
+
 
 class AgentResponse(BaseModel):
     id: str
@@ -115,6 +130,7 @@ class AgentResponse(BaseModel):
     description: str
     capabilities: List[str]
 
+
 class TelemetryResponse(BaseModel):
     signalIntegrity: float
     bandwidth: float
@@ -122,25 +138,31 @@ class TelemetryResponse(BaseModel):
     latency: float
     timestamp: str
 
+
 # WebSocket message validation models
 class WSMessageType(str, Enum):
     """Valid WebSocket message types."""
+
     PING = "ping"
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
     COMMAND = "command"
 
+
 class WSMessage(BaseModel):
     """Validated WebSocket message structure."""
+
     type: WSMessageType
     payload: Dict[str, Any] = Field(default_factory=dict, max_length=100)
 
     class Config:
         str_max_length = 10000  # Limit string lengths in payload
 
+
 # ============================================================================
 # CONNECTION MANAGER
 # ============================================================================
+
 
 class ConnectionManager:
     """Manages WebSocket connections for real-time updates."""
@@ -156,12 +178,16 @@ class ConnectionManager:
             "client_id": client_id or str(uuid.uuid4()),
             "connected_at": datetime.now().isoformat(),
         }
-        logger.info(f"WebSocket client connected: {self.connection_metadata[websocket]['client_id']}")
+        logger.info(
+            f"WebSocket client connected: {self.connection_metadata[websocket]['client_id']}"
+        )
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
         metadata = self.connection_metadata.pop(websocket, {})
-        logger.info(f"WebSocket client disconnected: {metadata.get('client_id', 'unknown')}")
+        logger.info(
+            f"WebSocket client disconnected: {metadata.get('client_id', 'unknown')}"
+        )
 
     async def broadcast(self, message_type: str, payload: Any):
         """Broadcast a message to all connected clients."""
@@ -181,7 +207,9 @@ class ConnectionManager:
         for conn in disconnected:
             self.disconnect(conn)
 
-    async def send_to_client(self, websocket: WebSocket, message_type: str, payload: Any):
+    async def send_to_client(
+        self, websocket: WebSocket, message_type: str, payload: Any
+    ):
         """Send a message to a specific client."""
         try:
             message = json.dumps({"type": message_type, "payload": payload})
@@ -189,11 +217,13 @@ class ConnectionManager:
         except Exception as e:
             logger.warning(f"Failed to send to client: {e}")
 
+
 manager = ConnectionManager()
 
 # ============================================================================
 # APPLICATION STATE
 # ============================================================================
+
 
 class AppState:
     """Global application state container."""
@@ -210,11 +240,13 @@ class AppState:
         self.knowledge_items: List[Dict[str, Any]] = []
         self._background_tasks: List[asyncio.Task] = []
 
+
 app_state = AppState()
 
 # ============================================================================
 # LIFESPAN MANAGEMENT
 # ============================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -241,12 +273,8 @@ async def lifespan(app: FastAPI):
     await initialize_agents()
 
     # Start background tasks
-    app_state._background_tasks.append(
-        asyncio.create_task(telemetry_broadcaster())
-    )
-    app_state._background_tasks.append(
-        asyncio.create_task(status_monitor())
-    )
+    app_state._background_tasks.append(asyncio.create_task(telemetry_broadcaster()))
+    app_state._background_tasks.append(asyncio.create_task(status_monitor()))
 
     logger.info("ASTRO API Server started successfully")
 
@@ -267,6 +295,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("ASTRO API Server shutdown complete")
 
+
 async def initialize_agents():
     """Initialize and register all agents with the engine."""
 
@@ -281,8 +310,7 @@ async def initialize_agents():
             "safe_search": True,
         }
         research_agent = ResearchAgent(
-            agent_id="research_agent_001",
-            config=research_config
+            agent_id="research_agent_001", config=research_config
         )
         await app_state.engine.register_agent(
             AgentConfig(
@@ -290,7 +318,7 @@ async def initialize_agents():
                 capabilities=["web_search", "content_extraction", "summarization"],
                 max_concurrent_tasks=3,
             ),
-            instance=research_agent
+            instance=research_agent,
         )
         app_state.agents["research_agent_001"] = research_agent
         logger.info("Research agent initialized")
@@ -305,17 +333,14 @@ async def initialize_agents():
                 "use_docker_sandbox": True,
                 "allowed_languages": ["python"],
             }
-            code_agent = CodeAgent(
-                agent_id="code_agent_001",
-                config=code_config
-            )
+            code_agent = CodeAgent(agent_id="code_agent_001", config=code_config)
             await app_state.engine.register_agent(
                 AgentConfig(
                     agent_id="code_agent_001",
                     capabilities=["code_generation", "code_execution", "code_review"],
                     max_concurrent_tasks=2,
                 ),
-                instance=code_agent
+                instance=code_agent,
             )
             app_state.agents["code_agent_001"] = code_agent
             logger.info("Code agent initialized")
@@ -328,19 +353,24 @@ async def initialize_agents():
     if FileSystemAgent is not None:
         fs_config = {
             "root_dir": str(Path(__file__).parent.parent.parent / "workspace"),
-            "allowed_extensions": [".txt", ".py", ".md", ".json", ".csv", ".yaml", ".log"],
+            "allowed_extensions": [
+                ".txt",
+                ".py",
+                ".md",
+                ".json",
+                ".csv",
+                ".yaml",
+                ".log",
+            ],
         }
-        fs_agent = FileSystemAgent(
-            agent_id="filesystem_agent_001",
-            config=fs_config
-        )
+        fs_agent = FileSystemAgent(agent_id="filesystem_agent_001", config=fs_config)
         await app_state.engine.register_agent(
             AgentConfig(
                 agent_id="filesystem_agent_001",
                 capabilities=["file_read", "file_write", "file_list"],
                 max_concurrent_tasks=5,
             ),
-            instance=fs_agent
+            instance=fs_agent,
         )
         app_state.agents["filesystem_agent_001"] = fs_agent
         logger.info("Filesystem agent initialized")
@@ -348,6 +378,7 @@ async def initialize_agents():
         logger.warning("Filesystem agent not available - missing dependencies")
 
     logger.info(f"Initialized {len(app_state.agents)} agents")
+
 
 async def telemetry_broadcaster():
     """Background task to broadcast telemetry data."""
@@ -375,6 +406,7 @@ async def telemetry_broadcaster():
             logger.warning(f"Telemetry broadcast error: {e}")
             await asyncio.sleep(5)
 
+
 async def status_monitor():
     """Background task to monitor and broadcast system status."""
     while True:
@@ -394,9 +426,11 @@ async def status_monitor():
             logger.warning(f"Status monitor error: {e}")
             await asyncio.sleep(5)
 
+
 # ============================================================================
 # CREATE APPLICATION
 # ============================================================================
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -427,7 +461,12 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=security_config.cors_allow_methods,
         allow_headers=security_config.cors_allow_headers,
-        expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+        expose_headers=[
+            "X-Request-ID",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+        ],
     )
 
     # Mount static files for web interface
@@ -440,29 +479,34 @@ def create_app() -> FastAPI:
 
     return app
 
+
 def register_routes(app: FastAPI):
     """Register all API routes."""
 
     # Initialize and include routers
-    from api.routers import system_router
-    from api.routers.system import init_router as init_system_router
+    from src.api.routers import system_router
+    from src.api.routers.system import init_router as init_system_router
+
     init_system_router(app_state, manager)
     app.include_router(system_router)
 
     # Agents router
-    from api.routers import agents_router
-    from api.routers.agents import init_router as init_agents_router
+    from src.api.routers import agents_router
+    from src.api.routers.agents import init_router as init_agents_router
+
     init_agents_router(app_state)
     app.include_router(agents_router)
 
     # Workflows router
-    from api.routers import workflows_router
-    from api.routers.workflows import init_router as init_workflows_router
+    from src.api.routers import workflows_router
+    from src.api.routers.workflows import init_router as init_workflows_router
+
     init_workflows_router(app_state, manager, WorkflowPriority, Task, Workflow)
     app.include_router(workflows_router)
 
     # Health check routes
-    from api.health import router as health_router, init_health_checker
+    from src.api.health import init_health_checker, router as health_router
+
     app.include_router(health_router)
 
     # Initialize health checker with engine and db when available
@@ -478,7 +522,7 @@ def register_routes(app: FastAPI):
         """Prometheus metrics endpoint."""
         collector = get_metrics_collector()
         collector.update_uptime()
-        return get_metrics().decode('utf-8')
+        return get_metrics().decode("utf-8")
 
     # ========================================================================
     # STATIC FILE ROUTES
@@ -501,7 +545,9 @@ def register_routes(app: FastAPI):
     @app.get("/app.js")
     async def serve_app_js():
         web_dir = Path(__file__).parent.parent.parent / "web"
-        return FileResponse(str(web_dir / "app.js"), media_type="application/javascript")
+        return FileResponse(
+            str(web_dir / "app.js"), media_type="application/javascript"
+        )
 
     @app.get("/chat-ui.css")
     async def serve_chat_css():
@@ -511,7 +557,9 @@ def register_routes(app: FastAPI):
     @app.get("/chat-app.js")
     async def serve_chat_app_js():
         web_dir = Path(__file__).parent.parent.parent / "web"
-        return FileResponse(str(web_dir / "chat-app.js"), media_type="application/javascript")
+        return FileResponse(
+            str(web_dir / "chat-app.js"), media_type="application/javascript"
+        )
 
     # New consumer-friendly chat interface
     @app.get("/assistant")
@@ -541,7 +589,9 @@ def register_routes(app: FastAPI):
     async def execute_command(request: CommandRequest):
         """Execute a natural language command."""
         if not app_state.running:
-            raise HTTPException(status_code=400, detail="System is not running. Start the system first.")
+            raise HTTPException(
+                status_code=400, detail="System is not running. Start the system first."
+            )
 
         # Initialize NL interface if needed
         if not app_state.nl_interface:
@@ -561,12 +611,15 @@ def register_routes(app: FastAPI):
         try:
             workflow_id = await app_state.nl_interface.process_request(request.command)
 
-            await manager.broadcast("log", {
-                "timestamp": datetime.now().strftime("%H:%M"),
-                "type": "command",
-                "title": "Command Executed",
-                "message": f"Processing: {request.command[:100]}...",
-            })
+            await manager.broadcast(
+                "log",
+                {
+                    "timestamp": datetime.now().strftime("%H:%M"),
+                    "type": "command",
+                    "title": "Command Executed",
+                    "message": f"Processing: {request.command[:100]}...",
+                },
+            )
 
             return {
                 "status": "accepted",
@@ -590,7 +643,11 @@ def register_routes(app: FastAPI):
 
         # Fallback to in-memory session keys
         return [
-            {"id": sid, "title": "Conversation", "createdAt": datetime.now().isoformat()}
+            {
+                "id": sid,
+                "title": "Conversation",
+                "createdAt": datetime.now().isoformat(),
+            }
             for sid in app_state.chat_sessions.keys()
         ]
 
@@ -630,8 +687,7 @@ def register_routes(app: FastAPI):
         if app_state.db:
             try:
                 await app_state.db.save_chat_message_async(
-                    session_id, user_message["id"], "user",
-                    request.message, timestamp
+                    session_id, user_message["id"], "user", request.message, timestamp
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist user message: {e}")
@@ -652,8 +708,11 @@ def register_routes(app: FastAPI):
         if app_state.db:
             try:
                 await app_state.db.save_chat_message_async(
-                    session_id, assistant_message["id"], "assistant",
-                    response_content, assistant_timestamp
+                    session_id,
+                    assistant_message["id"],
+                    "assistant",
+                    response_content,
+                    assistant_timestamp,
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist assistant message: {e}")
@@ -666,7 +725,9 @@ def register_routes(app: FastAPI):
     async def _generate_chat_response(session_id: str, user_message: str) -> str:
         """Generate response using Ollama/OpenAI with conversation history."""
         if not app_state.llm_client:
-            return "LLM not configured. Please ensure Ollama is running or set an API key."
+            return (
+                "LLM not configured. Please ensure Ollama is running or set an API key."
+            )
 
         # Build conversation history (last 20 messages for context)
         history = app_state.chat_sessions.get(session_id, [])[-20:]
@@ -689,7 +750,7 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
         messages.append({"role": "user", "content": user_message})
 
         try:
-            model = getattr(app_state, 'llm_model', 'llama3.2')
+            model = getattr(app_state, "llm_model", "llama3.2")
             response = await app_state.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -722,7 +783,8 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
         if q:
             q_lower = q.lower()
             items = [
-                item for item in items
+                item
+                for item in items
                 if q_lower in item.get("title", "").lower()
                 or q_lower in item.get("content", "").lower()
                 or any(q_lower in tag.lower() for tag in item.get("tags", []))
@@ -734,7 +796,11 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
     async def create_knowledge_item(request: KnowledgeItemRequest):
         """Create a new knowledge item and persist to database."""
         item_id = str(uuid.uuid4())
-        summary = request.content[:200] + "..." if len(request.content) > 200 else request.content
+        summary = (
+            request.content[:200] + "..."
+            if len(request.content) > 200
+            else request.content
+        )
 
         item = {
             "id": item_id,
@@ -750,8 +816,12 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
         if app_state.db:
             try:
                 await app_state.db.save_knowledge_item_async(
-                    item_id, request.title, request.content,
-                    request.type, request.tags, summary
+                    item_id,
+                    request.title,
+                    request.content,
+                    request.type,
+                    request.tags,
+                    summary,
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist knowledge item: {e}")
@@ -811,15 +881,19 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
 
         files = []
 
-        for item in sorted(target_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        for item in sorted(
+            target_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())
+        ):
             stat = item.stat()
-            files.append({
-                "name": item.name,
-                "path": str(item.relative_to(workspace)),
-                "type": "directory" if item.is_dir() else "file",
-                "size": stat.st_size if item.is_file() else None,
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            })
+            files.append(
+                {
+                    "name": item.name,
+                    "path": str(item.relative_to(workspace)),
+                    "type": "directory" if item.is_dir() else "file",
+                    "size": stat.st_size if item.is_file() else None,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
 
         return files
 
@@ -867,10 +941,13 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
         try:
             file_path.write_text(request.content)
 
-            await manager.broadcast("file_change", {
-                "action": "created" if not file_path.exists() else "updated",
-                "path": request.path,
-            })
+            await manager.broadcast(
+                "file_change",
+                {
+                    "action": "created" if not file_path.exists() else "updated",
+                    "path": request.path,
+                },
+            )
 
             return {"status": "success", "path": request.path}
         except Exception as e:
@@ -912,20 +989,30 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
 
         # Check connection limit per IP
         client_ip = websocket.client.host if websocket.client else "unknown"
-        ip_connections = sum(1 for ws in manager.active_connections
-                           if manager.connection_metadata.get(ws, {}).get('ip') == client_ip)
+        ip_connections = sum(
+            1
+            for ws in manager.active_connections
+            if manager.connection_metadata.get(ws, {}).get("ip") == client_ip
+        )
 
         if ip_connections >= MAX_CONNECTIONS_PER_IP:
             await websocket.close(code=1008, reason="Too many connections from this IP")
             return
 
         await manager.connect(websocket)
-        manager.connection_metadata[websocket] = {'ip': client_ip, 'connected_at': time.time()}
+        manager.connection_metadata[websocket] = {
+            "ip": client_ip,
+            "connected_at": time.time(),
+        }
 
         # Send initial state
-        await manager.send_to_client(websocket, "system_status", {
-            "status": "online" if app_state.running else "ready",
-        })
+        await manager.send_to_client(
+            websocket,
+            "system_status",
+            {
+                "status": "online" if app_state.running else "ready",
+            },
+        )
 
         try:
             while True:
@@ -939,18 +1026,20 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
 
                 message_count += 1
                 if message_count > MAX_MESSAGES_PER_SECOND:
-                    await manager.send_to_client(websocket, "error", {
-                        "message": "Rate limit exceeded",
-                        "retry_after": 1.0
-                    })
+                    await manager.send_to_client(
+                        websocket,
+                        "error",
+                        {"message": "Rate limit exceeded", "retry_after": 1.0},
+                    )
                     continue
 
                 # Size validation
                 if len(data) > MAX_MESSAGE_SIZE:
-                    await manager.send_to_client(websocket, "error", {
-                        "message": "Message too large",
-                        "max_size": MAX_MESSAGE_SIZE
-                    })
+                    await manager.send_to_client(
+                        websocket,
+                        "error",
+                        {"message": "Message too large", "max_size": MAX_MESSAGE_SIZE},
+                    )
                     continue
 
                 try:
@@ -959,7 +1048,9 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
                     validated = WSMessage(**raw_message)
 
                     if validated.type == WSMessageType.PING:
-                        await manager.send_to_client(websocket, "pong", {"time": time.time()})
+                        await manager.send_to_client(
+                            websocket, "pong", {"time": time.time()}
+                        )
                     elif validated.type == WSMessageType.SUBSCRIBE:
                         pass  # Handle subscription
                     else:
@@ -967,10 +1058,14 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
 
                 except json.JSONDecodeError:
                     logger.warning(f"Invalid JSON received: {data[:100]}")
-                    await manager.send_to_client(websocket, "error", {"message": "Invalid JSON"})
+                    await manager.send_to_client(
+                        websocket, "error", {"message": "Invalid JSON"}
+                    )
                 except Exception as e:
                     logger.warning(f"WebSocket validation error: {e}")
-                    await manager.send_to_client(websocket, "error", {"message": "Invalid message format"})
+                    await manager.send_to_client(
+                        websocket, "error", {"message": "Invalid message format"}
+                    )
 
         except WebSocketDisconnect:
             manager.disconnect(websocket)
@@ -978,9 +1073,11 @@ Be helpful, accurate, and concise. When tasks require agent capabilities, explai
             logger.error(f"WebSocket error: {e}")
             manager.disconnect(websocket)
 
+
 # ============================================================================
 # SERVER RUNNER
 # ============================================================================
+
 
 def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     """Run the API server."""
@@ -999,6 +1096,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
         reload=reload,
         log_level="info",
     )
+
 
 # Create app instance for uvicorn
 app = create_app()

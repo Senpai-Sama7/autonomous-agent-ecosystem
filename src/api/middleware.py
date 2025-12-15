@@ -34,38 +34,60 @@ logger = logging.getLogger("ASTRO.Middleware")
 # CONFIGURATION
 # ============================================================================
 
+
 @dataclass
 class SecurityConfig:
     """Security configuration with sensible defaults."""
 
     # API Key settings
     api_key_header: str = "X-API-Key"
-    api_key_enabled: bool = field(default_factory=lambda: os.getenv("ASTRO_API_KEY_ENABLED", "false").lower() == "true")
-    api_keys: Set[str] = field(default_factory=lambda: set(filter(None, os.getenv("ASTRO_API_KEYS", "").split(","))))
+    api_key_enabled: bool = field(
+        default_factory=lambda: os.getenv("ASTRO_API_KEY_ENABLED", "false").lower()
+        == "true"
+    )
+    api_keys: Set[str] = field(
+        default_factory=lambda: set(
+            filter(None, os.getenv("ASTRO_API_KEYS", "").split(","))
+        )
+    )
 
     # Rate limiting
     rate_limit_enabled: bool = True
     rate_limit_requests: int = 100  # requests per window
-    rate_limit_window: int = 60     # seconds
-    rate_limit_burst: int = 20      # burst allowance
+    rate_limit_window: int = 60  # seconds
+    rate_limit_burst: int = 20  # burst allowance
 
     # CORS settings
     cors_origins: List[str] = field(default_factory=lambda: _parse_cors_origins())
     cors_allow_credentials: bool = True
-    cors_allow_methods: List[str] = field(default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    cors_allow_methods: List[str] = field(
+        default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    )
     cors_allow_headers: List[str] = field(default_factory=lambda: ["*"])
 
     # Request limits
     max_request_size: int = 10 * 1024 * 1024  # 10MB
-    request_timeout: float = 30.0              # seconds
+    request_timeout: float = 30.0  # seconds
 
     # Exempt paths (no auth required)
-    exempt_paths: Set[str] = field(default_factory=lambda: {
-        "/", "/health", "/ready", "/metrics",
-        "/styles.css", "/app.js", "/static",
-        "/chat", "/workflows", "/vault", "/files",  # SPA routes
-        "/docs", "/redoc", "/openapi.json",
-    })
+    exempt_paths: Set[str] = field(
+        default_factory=lambda: {
+            "/",
+            "/health",
+            "/ready",
+            "/metrics",
+            "/styles.css",
+            "/app.js",
+            "/static",
+            "/chat",
+            "/workflows",
+            "/vault",
+            "/files",  # SPA routes
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        }
+    )
 
     # WebSocket paths
     websocket_paths: Set[str] = field(default_factory=lambda: {"/ws"})
@@ -93,6 +115,7 @@ security_config = SecurityConfig()
 # ============================================================================
 # RATE LIMITER
 # ============================================================================
+
 
 class SlidingWindowRateLimiter:
     """
@@ -135,7 +158,8 @@ class SlidingWindowRateLimiter:
 
             # Clean old entries for this client
             self._requests[client_id] = [
-                (ts, count) for ts, count in self._requests[client_id]
+                (ts, count)
+                for ts, count in self._requests[client_id]
                 if ts > window_start
             ]
 
@@ -148,8 +172,7 @@ class SlidingWindowRateLimiter:
             # Check burst (recent requests in last second)
             recent_start = now - 1.0
             recent_count = sum(
-                count for ts, count in self._requests[client_id]
-                if ts > recent_start
+                count for ts, count in self._requests[client_id] if ts > recent_start
             )
 
             headers = {
@@ -189,7 +212,9 @@ class SlidingWindowRateLimiter:
             del self._requests[client_id]
 
         if to_remove:
-            logger.debug(f"Rate limiter cleanup: removed {len(to_remove)} inactive clients")
+            logger.debug(
+                f"Rate limiter cleanup: removed {len(to_remove)} inactive clients"
+            )
 
 
 # Global rate limiter instance
@@ -203,6 +228,7 @@ rate_limiter = SlidingWindowRateLimiter(
 # ============================================================================
 # AUTHENTICATION
 # ============================================================================
+
 
 def verify_api_key(api_key: str) -> bool:
     """
@@ -241,6 +267,7 @@ def get_client_id(request: Request) -> str:
 # ============================================================================
 # MIDDLEWARE CLASSES
 # ============================================================================
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
@@ -330,7 +357,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        from core.audit_logger import get_audit_logger, AuditEvent
+        from src.core.audit_logger import AuditEvent, get_audit_logger
+
         audit = get_audit_logger()
         client_ip = get_client_id(request)
         request_id = getattr(request.state, "request_id", None)
@@ -352,8 +380,15 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         api_key = request.headers.get(security_config.api_key_header)
 
         if not api_key:
-            audit.log(AuditEvent.AUTH_FAILURE, "anonymous", path, "failure",
-                     {"reason": "missing_key"}, request_id, client_ip)
+            audit.log(
+                AuditEvent.AUTH_FAILURE,
+                "anonymous",
+                path,
+                "failure",
+                {"reason": "missing_key"},
+                request_id,
+                client_ip,
+            )
             logger.warning(f"Missing API key for {request.method} {path}")
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -362,8 +397,15 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             )
 
         if not verify_api_key(api_key):
-            audit.log(AuditEvent.AUTH_FAILURE, "api_key", path, "failure",
-                     {"reason": "invalid_key"}, request_id, client_ip)
+            audit.log(
+                AuditEvent.AUTH_FAILURE,
+                "api_key",
+                path,
+                "failure",
+                {"reason": "invalid_key"},
+                request_id,
+                client_ip,
+            )
             logger.warning(f"Invalid API key for {request.method} {path}")
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -371,7 +413,15 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 headers={"WWW-Authenticate": "ApiKey"},
             )
 
-        audit.log(AuditEvent.AUTH_SUCCESS, "api_key", path, "success", None, request_id, client_ip)
+        audit.log(
+            AuditEvent.AUTH_SUCCESS,
+            "api_key",
+            path,
+            "success",
+            None,
+            request_id,
+            client_ip,
+        )
         return await call_next(request)
 
 
@@ -408,6 +458,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # WEBSOCKET AUTHENTICATION
 # ============================================================================
 
+
 async def authenticate_websocket(
     websocket: WebSocket,
     api_key: Optional[str] = None,
@@ -436,6 +487,7 @@ async def authenticate_websocket(
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
 
 def get_allowed_origins() -> List[str]:
     """Get list of allowed CORS origins."""
@@ -490,6 +542,7 @@ def add_security_middleware(app):
 # CSRF PROTECTION
 # ============================================================================
 
+
 class CSRFProtection:
     """
     CSRF protection using double-submit cookie pattern.
@@ -515,12 +568,15 @@ class CSRFProtection:
     def generate_token(self) -> str:
         """Generate a cryptographically secure CSRF token."""
         import secrets
+
         token = secrets.token_urlsafe(self.TOKEN_LENGTH)
         self._tokens[token] = time.time() + self._token_ttl
         self._cleanup_expired()
         return token
 
-    def validate_token(self, cookie_token: Optional[str], header_token: Optional[str]) -> bool:
+    def validate_token(
+        self, cookie_token: Optional[str], header_token: Optional[str]
+    ) -> bool:
         """Validate CSRF token using constant-time comparison."""
         if not cookie_token or not header_token:
             return False
@@ -544,9 +600,20 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     """CSRF protection middleware for state-changing requests."""
 
     SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-    EXEMPT_PATHS = {"/health", "/ready", "/metrics", "/ws", "/docs", "/redoc", "/openapi.json", "/api/"}
+    EXEMPT_PATHS = {
+        "/health",
+        "/ready",
+        "/metrics",
+        "/ws",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/api/",
+    }
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # Skip for safe methods
         if request.method in self.SAFE_METHODS:
             response = await call_next(request)
@@ -559,7 +626,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     httponly=False,  # JS needs to read it
                     samesite="strict",
                     secure=os.getenv("ASTRO_ENV") == "production",
-                    max_age=3600
+                    max_age=3600,
                 )
             return response
 
@@ -576,10 +643,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         header_token = request.headers.get(CSRFProtection.HEADER_NAME)
 
         if not csrf_protection.validate_token(cookie_token, header_token):
-            logger.warning(f"CSRF validation failed for {request.method} {request.url.path}")
+            logger.warning(
+                f"CSRF validation failed for {request.method} {request.url.path}"
+            )
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "CSRF token missing or invalid"}
+                content={"detail": "CSRF token missing or invalid"},
             )
 
         return await call_next(request)
@@ -588,6 +657,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 # ============================================================================
 # REQUEST SIGNING (HMAC)
 # ============================================================================
+
 
 class RequestSigningMiddleware(BaseHTTPMiddleware):
     """
@@ -600,10 +670,21 @@ class RequestSigningMiddleware(BaseHTTPMiddleware):
     Enable by setting ASTRO_SIGNING_KEY environment variable.
     """
 
-    EXEMPT_PATHS = {"/health", "/ready", "/metrics", "/docs", "/redoc", "/openapi.json", "/ws"}
+    EXEMPT_PATHS = {
+        "/health",
+        "/ready",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/ws",
+    }
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        from api.request_signing import get_request_signer
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        from src.api.request_signing import get_request_signer
+
         signer = get_request_signer()
 
         # Skip if signing not configured
@@ -624,20 +705,29 @@ class RequestSigningMiddleware(BaseHTTPMiddleware):
         if not timestamp or not signature:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Missing signature headers"}
+                content={"detail": "Missing signature headers"},
             )
 
         body = await request.body()
-        valid, msg = signer.verify(request.method, request.url.path, body.decode(), timestamp, signature)
+        valid, msg = signer.verify(
+            request.method, request.url.path, body.decode(), timestamp, signature
+        )
 
         if not valid:
-            from core.audit_logger import get_audit_logger, AuditEvent
+            from src.core.audit_logger import AuditEvent, get_audit_logger
+
             audit = get_audit_logger()
-            audit.log(AuditEvent.SECURITY_VIOLATION, "unknown", request.url.path, "failure",
-                     {"reason": msg}, getattr(request.state, "request_id", None), get_client_id(request))
+            audit.log(
+                AuditEvent.SECURITY_VIOLATION,
+                "unknown",
+                request.url.path,
+                "failure",
+                {"reason": msg},
+                getattr(request.state, "request_id", None),
+                get_client_id(request),
+            )
             return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": msg}
+                status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": msg}
             )
 
         return await call_next(request)

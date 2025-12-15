@@ -2,10 +2,12 @@
 Session Manager with Token Rotation
 Prevents session hijacking by rotating tokens periodically.
 """
+
 import secrets
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
+
 
 @dataclass
 class Session:
@@ -14,6 +16,7 @@ class Session:
     created_at: float
     last_rotated: float
     token: str
+
 
 class SessionManager:
     """Session management with automatic token rotation."""
@@ -61,12 +64,18 @@ class SessionManager:
     def cleanup(self):
         """Remove expired sessions."""
         now = time.time()
-        expired = [sid for sid, s in self._sessions.items() if now - s.created_at > self.SESSION_TTL]
+        expired = [
+            sid
+            for sid, s in self._sessions.items()
+            if now - s.created_at > self.SESSION_TTL
+        ]
         for sid in expired:
             del self._sessions[sid]
 
+
 # Singleton
 _manager: Optional[SessionManager] = None
+
 
 def get_session_manager() -> SessionManager:
     global _manager

@@ -1,11 +1,7 @@
-"""
-Autonomous Agent Ecosystem - Main Application
-Updated by C0Di3 to support Declarative Workflows and Templating.
-"""
+"""Main entrypoint for Astro."""
 
 import asyncio
 import json
-import time
 import uuid
 from typing import Dict, Any, List
 import argparse
@@ -15,13 +11,12 @@ import yaml
 
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.logger import configure_logging, get_logger
-from core.engine import AgentEngine, AgentConfig, Workflow, Task, WorkflowPriority
-from core.nl_interface import NaturalLanguageInterface
+def main() -> None:
+    """Entrypoint executed via ``python -m src.main``."""
 
 # from agents.research_agent import ResearchAgent  # Temporarily disabled
+from agents.base_agent import TaskResult
 from agents.code_agent import CodeAgent
 from agents.filesystem_agent import FileSystemAgent
 from monitoring.monitoring_dashboard import MonitoringDashboard
@@ -30,6 +25,22 @@ from utils.config_loader import ConfigLoader
 
 # Logger will be configured in main() based on CLI args
 logger = get_logger("MainApplication")
+
+
+class UnavailableAgent:
+    """Stub agent used when an implementation is unavailable."""
+
+    def __init__(self, agent_id: str, capabilities: List[str]):
+        self.agent_id = agent_id
+        self.capabilities = capabilities
+        self.is_available = False
+
+    async def execute_task(self, task: Dict[str, Any] | None = None, context: Any | None = None) -> TaskResult:
+        return TaskResult(
+            success=False,
+            error_message=f"Agent {self.agent_id} unavailable",
+            result_data={"agent_id": self.agent_id, "available": False},
+        )
 
 
 class AutonomousAgentEcosystem:
@@ -108,55 +119,54 @@ class AutonomousAgentEcosystem:
             agent_id="filesystem_agent_001", config=fs_config_dict
         )
 
-        # Register agents with the engine
-        # (Note: In a real "Super Intelligent" system, we might load these AgentConfig objects from YAML too)
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="research_agent_001",
-                capabilities=[
-                    "web_search",
-                    "content_extraction",
-                    "knowledge_synthesis",
-                    "data_processing",
-                ],
-                max_concurrent_tasks=2,
-                reliability_score=0.92,
-                cost_per_operation=1.5,
-            ),
-            instance=research_agent if research_agent else None,
+        research_config = AgentConfig(
+            agent_id="research_agent_001",
+            capabilities=[
+                "web_search",
+                "content_extraction",
+                "knowledge_synthesis",
+                "data_processing",
+            ],
+            max_concurrent_tasks=2,
+            reliability_score=0.92,
+            cost_per_operation=1.5,
         )
 
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="code_agent_001",
-                capabilities=[
-                    "code_generation",
-                    "code_optimization",
-                    "debugging",
-                    "optimization",
-                ],
-                max_concurrent_tasks=code_config_dict.get("max_concurrent_tasks", 2),
-                reliability_score=0.88,
-                cost_per_operation=2.0,
-            ),
-            instance=code_agent,
+        code_config = AgentConfig(
+            agent_id="code_agent_001",
+            capabilities=[
+                "code_generation",
+                "code_optimization",
+                "debugging",
+                "optimization",
+            ],
+            max_concurrent_tasks=code_config_dict.get("max_concurrent_tasks", 2),
+            reliability_score=0.88,
+            cost_per_operation=2.0,
         )
 
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="filesystem_agent_001",
-                capabilities=["data_processing", "file_operations"],
-                max_concurrent_tasks=fs_config_dict.get("max_concurrent_tasks", 5),
-                reliability_score=0.99,
-                cost_per_operation=0.5,
-            ),
-            instance=fs_agent,
+        filesystem_config = AgentConfig(
+            agent_id="filesystem_agent_001",
+            capabilities=["data_processing", "file_operations"],
+            max_concurrent_tasks=fs_config_dict.get("max_concurrent_tasks", 5),
+            reliability_score=0.99,
+            cost_per_operation=0.5,
         )
 
-        # Store agent references
-        self.agents["research_agent_001"] = research_agent
-        self.agents["code_agent_001"] = code_agent
-        self.agents["filesystem_agent_001"] = fs_agent
+        # Register agents with the engine, substituting stubs when needed
+        await self._safe_register_agent(research_config, research_agent)
+        await self._safe_register_agent(code_config, code_agent)
+        await self._safe_register_agent(filesystem_config, fs_agent)
+
+    async def _safe_register_agent(self, config: AgentConfig, instance: Any | None) -> None:
+        if instance is None:
+            logger.warning(
+                "Agent implementation unavailable; registering stub", extra={"agent_id": config.agent_id}
+            )
+            instance = UnavailableAgent(config.agent_id, config.capabilities)
+
+        await self.engine.register_agent(config, instance=instance)
+        self.agents[config.agent_id] = instance
 
         # Register with dashboard
         self.dashboard.register_agent(
@@ -173,38 +183,52 @@ class AutonomousAgentEcosystem:
         logger.info("Agents initialized and registered successfully")
 
     async def create_sample_workflows(self):
-        """Create sample workflows from test YAML"""
-        logger.info("Creating sample workflows from test config...")
+        """Create sample workflows from YAML configuration."""
 
-        # Load test workflows
-        import yaml
+        logger.info("Creating sample workflows from config...")
 
-        with open("/home/donovan/Projects/AI/Astro/config/simple_test.yaml", "r") as f:
-            test_workflows = yaml.safe_load(f)
+        workflow_path_override = self.config.get("sample_workflows")
+        test_workflows = self.config_loader.load_workflows(
+            workflow_path=workflow_path_override
+        )
 
-        # Create and submit test workflows
+        if not test_workflows:
+            logger.info("No sample workflows loaded; skipping submission.")
+            return
+
         for wf_name, wf_config in test_workflows.items():
-            workflow = Workflow(
-                workflow_id=f"wf_{wf_name}_{uuid.uuid4().hex[:8]}",
-                name=wf_config["description"],
-                tasks=[
-                    Task(
-                        task_id=f"{task['id']}_{uuid.uuid4().hex[:8]}",
-                        description=task["instruction"],
-                        required_capabilities=[task["capability"]],
-                        payload=task.get("payload", {}),
-                        priority=WorkflowPriority(wf_config["priority"]),
-                    )
-                    for task in wf_config["tasks"]
-                ],
-                priority=WorkflowPriority(wf_config["priority"]),
-                max_execution_time=wf_config.get("max_execution_time", 3600.0),
-                cost_budget=wf_config.get("budget", 100.0),
-            )
+            if not isinstance(wf_config, dict):
+                logger.warning("Skipping workflow '%s' because it is not a mapping", wf_name)
+                continue
+
+            try:
+                workflow = Workflow(
+                    workflow_id=f"wf_{wf_name}_{uuid.uuid4().hex[:8]}",
+                    name=wf_config["description"],
+                    tasks=[
+                        Task(
+                            task_id=f"{task['id']}_{uuid.uuid4().hex[:8]}",
+                            description=task["instruction"],
+                            required_capabilities=[task["capability"]],
+                            payload=task.get("payload", {}),
+                            priority=WorkflowPriority(wf_config["priority"]),
+                        )
+                        for task in wf_config["tasks"]
+                    ],
+                    priority=WorkflowPriority(wf_config["priority"]),
+                    max_execution_time=wf_config.get("max_execution_time", 3600.0),
+                    cost_budget=wf_config.get("budget", 100.0),
+                )
+            except KeyError as exc:
+                logger.error(
+                    "Workflow '%s' missing required field: %s. Skipping.", wf_name, exc
+                )
+                continue
+
             self.workflows[workflow.workflow_id] = workflow
             await self.engine.submit_workflow(workflow)
             logger.info(
-                f"Submitted test workflow: {wf_name} ({wf_config['description']})"
+                "Submitted test workflow: %s (%s)", wf_name, wf_config.get("description", "")
             )
 
     async def start_system(self, shutdown_event: asyncio.Event | None = None):
@@ -313,6 +337,11 @@ def parse_arguments():
     parser.add_argument("--model-name", type=str, help="Model name to use")
     parser.add_argument("--api-key", type=str, help="API key for the LLM provider")
     parser.add_argument("--api-base", type=str, help="Base URL for the LLM API")
+    parser.add_argument(
+        "--sample-workflows",
+        type=str,
+        help="Path to sample workflows YAML file (relative to config/ by default)",
+    )
 
     return parser.parse_args()
 
@@ -395,4 +424,4 @@ async def interactive_mode(ecosystem, args):
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
