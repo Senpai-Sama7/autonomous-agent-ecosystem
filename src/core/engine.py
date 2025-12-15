@@ -184,11 +184,14 @@ class AgentEngine:
 
     def _is_agent_live(self, agent_id: str) -> bool:
         instance = self.agent_instances.get(agent_id)
+        if instance is None:
+            return False
+
+        # Re-fetch status after confirming instance exists to avoid race conditions
         status = self.agent_status.get(agent_id)
         if status in [AgentStatus.FAILED, AgentStatus.RECOVERING]:
             return False
-        if instance is None:
-            return False
+
         if hasattr(instance, "is_available") and not getattr(instance, "is_available"):
             return False
         return True
