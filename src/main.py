@@ -19,6 +19,7 @@ from core.engine import AgentEngine, AgentConfig, Workflow, Task, WorkflowPriori
 from core.nl_interface import NaturalLanguageInterface
 
 # from agents.research_agent import ResearchAgent  # Temporarily disabled
+from agents.base_agent import TaskResult
 from agents.code_agent import CodeAgent
 from agents.filesystem_agent import FileSystemAgent
 from monitoring.monitoring_dashboard import MonitoringDashboard
@@ -27,6 +28,22 @@ from utils.config_loader import ConfigLoader
 
 # Logger will be configured in main() based on CLI args
 logger = get_logger("MainApplication")
+
+
+class UnavailableAgent:
+    """Stub agent used when an implementation is unavailable."""
+
+    def __init__(self, agent_id: str, capabilities: List[str]):
+        self.agent_id = agent_id
+        self.capabilities = capabilities
+        self.is_available = False
+
+    async def execute_task(self, task: Dict[str, Any] | None = None, context: Any | None = None) -> TaskResult:
+        return TaskResult(
+            success=False,
+            error_message=f"Agent {self.agent_id} unavailable",
+            result_data={"agent_id": self.agent_id, "available": False},
+        )
 
 
 class AutonomousAgentEcosystem:
@@ -105,55 +122,54 @@ class AutonomousAgentEcosystem:
             agent_id="filesystem_agent_001", config=fs_config_dict
         )
 
-        # Register agents with the engine
-        # (Note: In a real "Super Intelligent" system, we might load these AgentConfig objects from YAML too)
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="research_agent_001",
-                capabilities=[
-                    "web_search",
-                    "content_extraction",
-                    "knowledge_synthesis",
-                    "data_processing",
-                ],
-                max_concurrent_tasks=2,
-                reliability_score=0.92,
-                cost_per_operation=1.5,
-            ),
-            instance=research_agent if research_agent else None,
+        research_config = AgentConfig(
+            agent_id="research_agent_001",
+            capabilities=[
+                "web_search",
+                "content_extraction",
+                "knowledge_synthesis",
+                "data_processing",
+            ],
+            max_concurrent_tasks=2,
+            reliability_score=0.92,
+            cost_per_operation=1.5,
         )
 
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="code_agent_001",
-                capabilities=[
-                    "code_generation",
-                    "code_optimization",
-                    "debugging",
-                    "optimization",
-                ],
-                max_concurrent_tasks=code_config_dict.get("max_concurrent_tasks", 2),
-                reliability_score=0.88,
-                cost_per_operation=2.0,
-            ),
-            instance=code_agent,
+        code_config = AgentConfig(
+            agent_id="code_agent_001",
+            capabilities=[
+                "code_generation",
+                "code_optimization",
+                "debugging",
+                "optimization",
+            ],
+            max_concurrent_tasks=code_config_dict.get("max_concurrent_tasks", 2),
+            reliability_score=0.88,
+            cost_per_operation=2.0,
         )
 
-        await self.engine.register_agent(
-            AgentConfig(
-                agent_id="filesystem_agent_001",
-                capabilities=["data_processing", "file_operations"],
-                max_concurrent_tasks=fs_config_dict.get("max_concurrent_tasks", 5),
-                reliability_score=0.99,
-                cost_per_operation=0.5,
-            ),
-            instance=fs_agent,
+        filesystem_config = AgentConfig(
+            agent_id="filesystem_agent_001",
+            capabilities=["data_processing", "file_operations"],
+            max_concurrent_tasks=fs_config_dict.get("max_concurrent_tasks", 5),
+            reliability_score=0.99,
+            cost_per_operation=0.5,
         )
 
-        # Store agent references
-        self.agents["research_agent_001"] = research_agent
-        self.agents["code_agent_001"] = code_agent
-        self.agents["filesystem_agent_001"] = fs_agent
+        # Register agents with the engine, substituting stubs when needed
+        await self._safe_register_agent(research_config, research_agent)
+        await self._safe_register_agent(code_config, code_agent)
+        await self._safe_register_agent(filesystem_config, fs_agent)
+
+    async def _safe_register_agent(self, config: AgentConfig, instance: Any | None) -> None:
+        if instance is None:
+            logger.warning(
+                "Agent implementation unavailable; registering stub", extra={"agent_id": config.agent_id}
+            )
+            instance = UnavailableAgent(config.agent_id, config.capabilities)
+
+        await self.engine.register_agent(config, instance=instance)
+        self.agents[config.agent_id] = instance
 
         # Register with dashboard
         self.dashboard.register_agent(

@@ -122,6 +122,10 @@ class Workflow:
     success_criteria: Dict[str, Any] = field(default_factory=dict)
 
 
+class AgentUnavailableError(Exception):
+    """Raised when a workflow requires capabilities with no live agent instances."""
+
+
 class AgentEngine:
     """
     Core engine that manages the autonomous agent ecosystem.
@@ -178,6 +182,20 @@ class AgentEngine:
             extra={"advanced_systems_enabled": enable_advanced_systems},
         )
 
+    def _is_agent_live(self, agent_id: str) -> bool:
+        instance = self.agent_instances.get(agent_id)
+        if instance is None:
+            return False
+
+        # Re-fetch status after confirming instance exists to avoid race conditions
+        status = self.agent_status.get(agent_id)
+        if status in [AgentStatus.FAILED, AgentStatus.RECOVERING]:
+            return False
+
+        if hasattr(instance, "is_available") and not getattr(instance, "is_available"):
+            return False
+        return True
+
     @property
     def process_pool(self) -> ProcessPoolExecutor:
         """Lazy-initialize process pool for CPU-bound tasks."""
@@ -223,10 +241,41 @@ class AgentEngine:
             f"Registered agent {config.agent_id} with capabilities: {config.capabilities}"
         )
 
+    def _get_available_agents_by_capability(self) -> Dict[str, List[str]]:
+        capability_map: Dict[str, List[str]] = {}
+        for agent_id, config in self.agents.items():
+            if not self._is_agent_live(agent_id):
+                continue
+            for capability in config.capabilities:
+                capability_map.setdefault(capability, []).append(agent_id)
+        return capability_map
+
+    def _validate_workflow_agents(self, workflow: Workflow) -> None:
+        available_agents = self._get_available_agents_by_capability()
+        missing_capabilities: Dict[str, Set[str]] = {}
+
+        for task in workflow.tasks:
+            for capability in task.required_capabilities:
+                if capability not in available_agents:
+                    missing_capabilities.setdefault(capability, set()).add(task.task_id)
+
+        if missing_capabilities:
+            capability_details = [
+                f"{capability} (tasks: {', '.join(sorted(task_ids))})"
+                for capability, task_ids in missing_capabilities.items()
+            ]
+            message = (
+                f"Workflow {workflow.workflow_id} requires capabilities without live agents: "
+                f"{'; '.join(capability_details)}"
+            )
+            logger.error(message, extra={"missing_capabilities": missing_capabilities})
+            raise AgentUnavailableError(message)
+
     @log_performance
     async def submit_workflow(self, workflow: Workflow):
         """Submit a new workflow for execution"""
         with LogContext(workflow_id=workflow.workflow_id):
+            self._validate_workflow_agents(workflow)
             self.workflows[workflow.workflow_id] = workflow
             await self.db.save_workflow_async(
                 workflow.workflow_id,
@@ -274,6 +323,8 @@ class AgentEngine:
 
             # Register agent health checks with self-healing
             for agent_id, instance in self.agent_instances.items():
+                if not self._is_agent_live(agent_id):
+                    continue
                 if hasattr(instance, "health_check"):
                     self._self_healing.register_component(
                         component_id=agent_id,
@@ -453,6 +504,8 @@ class AgentEngine:
         suitable_agents = []
 
         for agent_id, config in self.agents.items():
+            if not self._is_agent_live(agent_id):
+                continue
             agent_status = self.agent_status.get(agent_id, AgentStatus.IDLE)
 
             # Skip agents that are failed or recovering
