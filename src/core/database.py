@@ -103,6 +103,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.connection_timeout = connection_timeout
         self._async_initialized = False
+        self._sync_initialized = False
         self._closed = False
         self._pool: Optional[ConnectionPool] = None
         self._pool_size = pool_size
@@ -195,7 +196,7 @@ class DatabaseManager:
 
         # Knowledge items table
         await db.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
-                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                         (id TEXT PRIMARY KEY,
                           title TEXT,
                           content TEXT,
                           type TEXT,
@@ -208,12 +209,16 @@ class DatabaseManager:
 
         # Learning patterns table
         await db.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
-                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                         (pattern_id TEXT PRIMARY KEY,
                           pattern_type TEXT,
-                          pattern_data TEXT,
-                          frequency INTEGER,
-                          success_rate REAL,
-                          last_seen TIMESTAMP)""")
+                          conditions TEXT,
+                          action TEXT,
+                          expected_outcome TEXT,
+                          confidence REAL,
+                          usage_count INTEGER DEFAULT 0,
+                          success_count INTEGER DEFAULT 0,
+                          last_used TIMESTAMP,
+                          created_at TIMESTAMP)""")
 
         # Learning metadata table
         await db.execute("""CREATE TABLE IF NOT EXISTS learning_metadata
@@ -280,7 +285,7 @@ class DatabaseManager:
 
         # Knowledge items table
         c.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     (id TEXT PRIMARY KEY,
                       title TEXT,
                       content TEXT,
                       type TEXT,
@@ -292,62 +297,6 @@ class DatabaseManager:
                       updated_at TIMESTAMP)""")
 
         # Learning patterns table
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      pattern_type TEXT,
-                      pattern_data TEXT,
-                      frequency INTEGER,
-                      success_rate REAL,
-                      last_seen TIMESTAMP)""")
-
-        # Learning metadata table
-        c.execute("""CREATE TABLE IF NOT EXISTS learning_metadata
-                     (key TEXT PRIMARY KEY,
-                      value TEXT,
-                      updated_at TIMESTAMP)""")
-
-    def _init_db(self):
-        """Initialize database schema (deprecated - use _init_db_async)"""
-        _deprecation_warning("_init_db")
-        self._init_db_sync()
-
-        # Agents table
-        c.execute("""CREATE TABLE IF NOT EXISTS agents
-                     (agent_id TEXT PRIMARY KEY,
-                      config TEXT,
-                      state TEXT,
-                      reliability_score REAL,
-                      last_updated TIMESTAMP)""")
-
-        # Workflows table
-        c.execute("""CREATE TABLE IF NOT EXISTS workflows
-                     (workflow_id TEXT PRIMARY KEY,
-                      name TEXT,
-                      status TEXT,
-                      priority TEXT,
-                      created_at TIMESTAMP)""")
-
-        # Tasks table
-        c.execute("""CREATE TABLE IF NOT EXISTS tasks
-                     (task_id TEXT PRIMARY KEY,
-                      workflow_id TEXT,
-                      description TEXT,
-                      status TEXT,
-                      assigned_agent TEXT,
-                      result TEXT,
-                      created_at TIMESTAMP,
-                      completed_at TIMESTAMP,
-                      FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id))""")
-
-        # Metrics table
-        c.execute("""CREATE TABLE IF NOT EXISTS metrics
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      agent_id TEXT,
-                      metric_type TEXT,
-                      value REAL,
-                      timestamp TIMESTAMP)""")
-
-        # Learning patterns table (for recursive_learning.py)
         c.execute("""CREATE TABLE IF NOT EXISTS learning_patterns
                      (pattern_id TEXT PRIMARY KEY,
                       pattern_type TEXT,
@@ -366,56 +315,10 @@ class DatabaseManager:
                       value TEXT,
                       updated_at TIMESTAMP)""")
 
-        # Chat sessions table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_sessions
-                     (session_id TEXT PRIMARY KEY,
-                      created_at TIMESTAMP,
-                      last_active TIMESTAMP)""")
-
-        # Chat messages table
-        c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      session_id TEXT,
-                      message_id TEXT UNIQUE,
-                      role TEXT,
-                      content TEXT,
-                      timestamp TIMESTAMP,
-                      FOREIGN KEY(session_id) REFERENCES chat_sessions(session_id))""")
-
-        # Knowledge items table
-        c.execute("""CREATE TABLE IF NOT EXISTS knowledge_items
-                     (id TEXT PRIMARY KEY,
-                      title TEXT,
-                      content TEXT,
-                      type TEXT,
-                      tags TEXT,
-                      summary TEXT,
-                      created_at TIMESTAMP,
-                      updated_at TIMESTAMP)""")
-
-        # Create Indices
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tasks_workflow_id ON tasks(workflow_id)"
-        )
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tasks_assigned_agent ON tasks(assigned_agent)"
-        )
-        c.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_metrics_agent_id ON metrics(agent_id)"
-        )
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)"
-        )
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)"
-        )
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_knowledge_items_type ON knowledge_items(type)"
-        )
-
-        conn.commit()
-        conn.close()
+    def _init_db(self):
+        """Initialize database schema (deprecated - use _init_db_async)"""
+        _deprecation_warning("_init_db")
+        self._init_db_sync()
 
     # ========== ASYNC INITIALIZATION ==========
 
@@ -463,8 +366,20 @@ class DatabaseManager:
 
     # ========== SYNC HELPERS ==========
 
+    def _ensure_sync_init(self):
+        """Ensure sync schema is initialized (idempotent)."""
+        if self._sync_initialized:
+            return
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        self._create_tables_sync(c)
+        conn.commit()
+        conn.close()
+        self._sync_initialized = True
+
     def _execute_write(self, sql: str, params: tuple):
         """Execute a sync write operation"""
+        self._ensure_sync_init()
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(sql, params)
