@@ -50,6 +50,9 @@ logs/
 workspace/
 .env
 
+# User data (conversations)
+data/conversations.json
+
 # Testing
 .pytest_cache/
 .coverage

@@ -309,7 +309,7 @@ def parse_arguments():
     parser.add_argument(
         "--llm-provider",
         type=str,
-        help="LLM provider to use (openai, openrouter, ollama)",
+        help="LLM provider to use (openai, openrouter, ollama, gemini)",
     )
     parser.add_argument("--model-name", type=str, help="Model name to use")
     parser.add_argument("--api-key", type=str, help="API key for the LLM provider")
